@@ -1,0 +1,168 @@
+# 数据模型比对 Skill 配置文件（通用配置）
+# 注意：本文件只包含跨任务通用的配置
+# 任务特定内容（如具体的标准路径、映射经验）通过知识库积累
+
+# =============================================================================
+# 工作目录配置
+# =============================================================================
+workspace:
+  root: "/Users/zhanglei/data-model-compare-docs"
+
+# =============================================================================
+# 标准版本检测配置
+# 根据原标准文件路径判断是5.X还是6.0版本
+# =============================================================================
+standard_versions:
+  # 5.X版本标准路径配置
+  v5:
+    # 公版标准路径
+    public_paths:
+      - "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/02 V5.5/01 产品文档/02 标准规范/库表接入规范/"
+    # 项目化标准路径
+    project_paths:
+      - "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/02 V5.5/01 产品文档/04 标准规范（项目化）/"
+
+  # 6.0版本标准路径配置
+  v6:
+    # 公版标准路径
+    public_paths:
+      - "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/03 V6.0/01 产品文档/01 标准规范/"
+    # 项目化标准路径
+    project_paths:
+      - "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/03 V6.0/01 产品文档/02 标准规范（项目化）/"
+
+  # 字段命名规范
+  # 5.X版本使用拼音首字母缩写
+  # 6.0版本使用英文字段名
+  naming_convention:
+    v5: "pinyin_initials"
+    v6: "english"
+
+# =============================================================================
+# 字段匹配配置
+# =============================================================================
+field_matching:
+  # 匹配优先级（按顺序执行）
+  match_priority:
+    - "exact_chinese"      # 中文名精确匹配
+    - "exact_english"      # 英文名精确匹配
+    - "semantic_chinese"   # 同义词 + 语义 + 关键词匹配
+    - "cross_table"        # 跨表关联匹配
+    - "new_field"          # 标记为新增字段
+
+  # 同义词匹配
+  chinese_synonym:
+    enabled: true
+    use_dictionary: true    # 使用词库
+    use_similarity: true    # 使用相似度计算
+
+  # 关键词匹配（n-gram）
+  keyword_matching:
+    enabled: true
+    ngram_size: 2
+    overlap_threshold: 0.5  # 50% 重叠
+
+  # 语义匹配阈值（加权相似度 >= 此值认为匹配）
+  semantic_threshold: 0.6
+
+  # 字典名称字段识别关键词
+  # 当目标字段名包含 name_keywords 且同一表中存在匹配 code_keywords 的字段已匹配时
+  # 名称字段自动标记为"满足"（通过代码字段关联获取）
+  dictionary_field:
+    name_keywords:
+      - "名称"
+      - "name"
+    code_keywords:
+      - "代码"
+      - "编码"
+      - "代号"
+      - "编号"
+      - "code"
+      - "id"
+    # 排除模式（这些包含 name 但不是字典名称字段）
+    exclude_patterns:
+      - "filename"
+      - "username"
+      - "tablename"
+      - "hostname"
+      - "database_name"
+      - "schema_name"
+      - "column_name"
+      - "field_name"
+      - "class_name"
+
+# =============================================================================
+# 约束保护配置
+# =============================================================================
+constraint_protection:
+  # 约束等级定义
+  levels:
+    M: 3  # 必填
+    C: 2  # 条件必填
+    O: 1  # 可选
+
+  # 保护规则
+  rules:
+    # 目标M → 原标准必须M
+    target_M_requires_source_M: true
+    # 目标O → 原标准M/C/O均可
+    target_O_no_restriction: true
+
+# =============================================================================
+# 长度保护配置
+# =============================================================================
+length_protection:
+  enabled: true
+  unit: "char"  # char（字符）| byte（字节）
+
+# =============================================================================
+# 值域匹配配置
+# =============================================================================
+value_domain_matching:
+  # 匹配策略：conservative（保守）| aggressive（激进）
+  strategy: "conservative"
+
+  # 相似度阈值（>= 此值认为值域匹配）
+  similarity_threshold: 0.95
+
+  # 不确定区间下限（similarity 在此区间内需人工确认）
+  uncertain_lower_bound: 0.7
+
+  # 优先使用语义词库
+  semantic_priority: true
+
+  # 自动学习新的映射
+  auto_learn: true
+
+# =============================================================================
+# 跨表关联配置
+# =============================================================================
+cross_table_relation:
+  # 最大关联深度
+  max_depth: 3
+
+  # 路径评分权重（越低越优先）
+  path_scoring:
+    table_count_weight: 10    # 关联表数量权重
+    key_count_weight: 5       # 关联键数量权重
+    path_length_weight: 1     # 路径长度权重
+
+# =============================================================================
+# 质量验证配置
+# =============================================================================
+quality_validation:
+  auto_validate: true
+
+  # 验证项
+  checks:
+    - table_count        # 表数量检查
+    - field_count        # 字段数量检查
+    - field_content      # 字段内容抽样检查
+    - key_fields         # 关键字段检查
+
+  # 抽样比例
+  sample_ratio: 0.1  # 10% 抽样
+
+  # 验证失败后的处理策略
+  on_failure:
+    strategy: "warn"  # warn（警告但继续）| stop（停止执行）

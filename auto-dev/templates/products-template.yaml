@@ -1,0 +1,49 @@
+# ============================================================
+# Auto-Dev 产品配置模板
+#
+# 使用方式:
+#   1. 复制本文件为 products.yaml
+#   2. 将 "示例产品" 改为实际产品名称
+#   3. 填入实际的仓库信息
+#   4. 或使用脚本: python scripts/add-product.py
+# ============================================================
+
+products:
+  示例产品:
+    product_dir: "F:\work-space\products\my-product"  # 可选: 产品仓库根目录，配置后 auto-dev 可从任意目录启动并自动切换
+    worktree: false                # false=直接在源仓库开发（默认）, true=worktree隔离模式
+    tfs_project: "TFS项目路径"        # 必填: 如 "WINNING-6.0/WiNEX_WXP"
+    default_skill: "backend-dev"      # 必填: backend-dev | frontend-dev | rdf-dev
+    default_branch: "develop"         # 必填: 创建 feature 分支的 base
+    deploy_env_id: ""                 # 必填: 自动部署目标环境ID（每个产品独立配置）
+    developer: "TFS用户名"            # 可选: 默认开发负责人，创建任务时使用
+    change_limits:                    # 可选: 改动量安全阈值（超标则跳过）
+      max_files: 20                   # 最大改动文件数
+      max_insertions: 500             # 最大新增行数
+
+    repos:
+      - name: "仓库名"                # 必填
+        url: "git clone URL"          # 必填
+        branch: "分支名"              # 必填
+        skill: "backend-dev"          # 必填: backend-dev | frontend-dev | rdf-dev
+        tfs_project: "TFS项目路径"    # 必填: PR 创建时使用
+        description: "仓库说明"       # 可选
+
+    # 技能路由：标签 → registry prefix 映射
+    # products.yaml 中的 skill 值对应 pipeline.yaml skill_registry 的 prefix
+    # 实际调用的技能名由 pipeline.yaml 的 default 值决定
+    skill_routing:
+      "AI-BACKEND": "backend-dev"
+      "AI-FRONTEND": "frontend-dev"
+      "AI-RDF": "rdf-dev"
+      "AI-FULLSTACK":
+        - "backend-dev"
+        - "frontend-dev"
+        - "rdf-dev"
+
+# 标签路由说明:
+#   AI-BACKEND    → 只处理 skill=backend-dev 的仓库
+#   AI-FRONTEND   → 只处理 skill=frontend-dev 的仓库
+#   AI-RDF        → 只处理 skill=rdf-dev 的仓库
+#   AI-FULLSTACK  → 所有仓库都处理，按各自的 skill 分别路由
+#   无技能标签     → 使用 default_skill，筛选 skill=default_skill 的仓库

@@ -1,0 +1,161 @@
+# ============================================================
+# Auto-Dev 流水线配置模板
+#
+# 使用方法：
+#   1. 复制本文件为 pipeline.yaml
+#   2. 按下方注释修改需要定制的内容
+#   3. 运行校验: python scripts/configure-pipeline.py --validate
+# ============================================================
+
+# 技能注册表 — 定义允许的前缀范围
+# 团队替换技能时，新技能名必须以对应 prefix 开头
+# 例如 pm 可替换为 pm-teamA, pm-custom 等
+skill_registry:
+  pm:
+    prefix: "pm"
+    default: "pm"                # ← 改这里替换需求分析技能
+    replaceable: true            # ✅ 可替换
+    contract_ref: "skill-contracts.md#pm"
+
+  code:
+    prefix: "backend-dev"
+    default: "backend-dev"       # ← 改这里替换后端技能
+    replaceable: true            # ✅ 可替换
+    contract_ref: "skill-contracts.md#code"
+
+  frontend:
+    prefix: "frontend-dev"
+    default: "frontend-dev"      # ← 改这里替换前端技能
+    replaceable: true            # ✅ 可替换
+    contract_ref: "skill-contracts.md#frontend"
+
+  rdf:
+    prefix: "rdf-dev"
+    default: "rdf-dev"           # ← 改这里替换快开框架技能
+    replaceable: true            # ✅ 可替换
+    contract_ref: "skill-contracts.md#rdf"
+
+  verify:
+    prefix: "req-verify"
+    default: "req-verify"        # ❌ 不可替换
+    replaceable: false
+    reason: "输出 .verify-status 是 submit 阶段的强依赖"
+
+  submit:
+    prefix: "git-merge"
+    default: "git-merge"         # ❌ 不可替换
+    replaceable: false
+    reason: "提交规范是核心流程，必须关联 Task ID"
+
+  pr:
+    prefix: "devops-mcp"
+    default: "devops-mcp"        # ❌ 不可替换
+    replaceable: false
+    reason: "依赖企业 MCP 服务 create_pr/query_pr_status"
+
+  test:
+    prefix: "unit-test"
+    default: "unit-test"         # ← 改这里替换单元测试技能
+    replaceable: true            # ✅ 可替换
+    contract_ref: "skill-contracts.md#test"
+
+  build:
+    prefix: "devops-mcp"
+    default: "devops-mcp"        # ❌ 不可替换
+    replaceable: false
+    reason: "依赖企业 MCP 服务 build_single_demand"
+
+  deploy:
+    prefix: "devops-mcp"
+    default: "devops-mcp"        # ❌ 不可替换
+    replaceable: false
+    reason: "依赖企业 MCP 服务 trigger_deploy/query_deploy_progress"
+
+# 流水线阶段 — 按顺序执行
+# required: true  = 不可跳过、不可删除
+# required: false = 可注释掉或删除来跳过
+stages:
+  - id: prepare
+    name: 环境准备
+    required: true               # 必选，不可跳过
+    prompt: ""
+    skills: []
+    outputs:
+      - "{DOCS_DIR}/auto-dev.log"
+      - "{DOCS_DIR}/.deploy-env-id"
+
+  - id: pm
+    name: 需求分析
+    required: true              # 必选，不可跳过
+    prompt: "agents/agent-pm.md"
+    skills: ["pm"]               # 引用 skill_registry 中的 key
+    outputs:
+      - "{DOCS_DIR}/dev-plan.md"
+      - "{DOCS_DIR}/.analysis-task-id"
+
+  - id: code
+    name: 编码开发
+    required: true               # 必选，不可跳过
+    prompt: "agents/agent-code.md"
+    skills: ["code", "frontend", "rdf"]  # 按 tag 路由
+    outputs:
+      - "{DOCS_DIR}/summary.md"
+      - "{DOCS_DIR}/.task-id"
+
+  - id: verify
+    name: 需求校验
+    required: true               # 必选，校验未通过阻止提交
+    prompt: "agents/agent-verify.md"
+    skills: ["verify"]
+    outputs:
+      - "{DOCS_DIR}/verify-report.md"
+      - "{DOCS_DIR}/.verify-status"
+      - "{DOCS_DIR}/.verify-task-id"
+
+  # --- 可选阶段：单元测试（取消注释启用） ---
+  # - id: unit-test
+  #   name: 单元测试
+  #   required: false
+  #   prompt: ""
+  #   skills: ["test"]
+  #   outputs:
+  #     - "{DOCS_DIR}/.unit-test-result"
+
+  - id: submit
+    name: 提交+PR
+    required: true               # 必选，不可跳过
+    prompt: ""
+    skills: ["submit", "pr"]
+    outputs:
+      - "{DOCS_DIR}/.pr-review.md"
+      - "{DOCS_DIR}/.test-task-id"
+      - "{DOCS_DIR}/.pr-status"
+      - "{DOCS_DIR}/.total-diff"
+      - "{DOCS_DIR}/.pr-create-failed"
+
+  # --- 可选阶段：构建+部署 ---
+
+  - id: build
+    name: 构建
+    required: false              # 可选，可跳过
+    prompt: ""
+    skills: ["build"]
+    outputs:
+      - "{DOCS_DIR}/.build-status"
+
+  - id: deploy
+    name: 部署
+    required: false              # 可选，可跳过（构建成功才执行）
+    prompt: ""
+    skills: ["deploy"]
+    outputs:
+      - "{DOCS_DIR}/.deploy-status"
+      - "{DOCS_DIR}/.deploy-step-id"
+
+  - id: report
+    name: 报告通知
+    required: true              # 必选，不可跳过
+    prompt: ""
+    skills: []
+    outputs:
+      - "{DOCS_DIR}/ai-report.md"

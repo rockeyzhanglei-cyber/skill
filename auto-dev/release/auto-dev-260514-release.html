@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auto-Dev v2.0 Release Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 40px 24px;
+  }
+  .container {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+  .header .logo {
+    font-size: 48px;
+    margin-bottom: 8px;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+  .header .version {
+    display: inline-block;
+    margin-top: 10px;
+    background: rgba(96, 165, 250, 0.15);
+    border: 1px solid rgba(96, 165, 250, 0.3);
+    color: #93c5fd;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 16px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+  }
+  .header .stats {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-top: 20px;
+  }
+  .header .stat-item {
+    text-align: center;
+  }
+  .header .stat-item .num {
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+  .header .stat-item .num.blue { color: #60a5fa; }
+  .header .stat-item .num.green { color: #4ade80; }
+  .header .stat-item .num.purple { color: #c084fc; }
+  .header .stat-item .num.amber { color: #fbbf24; }
+  .header .stat-item .label {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 2px;
+  }
+
+  /* Section */
+  .section {
+    background: #1e293b;
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255,255,255,0.06);
+    position: relative;
+    overflow: hidden;
+  }
+  .section::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .section.highlight::before {
+    background: linear-gradient(90deg, #f472b6, #a78bfa, #60a5fa);
+  }
+  .section.feat::before {
+    background: linear-gradient(90deg, #4ade80, #22d3ee);
+  }
+  .section.fix::before {
+    background: linear-gradient(90deg, #fbbf24, #fb923c);
+  }
+  .section.other::before {
+    background: linear-gradient(90deg, #818cf8, #6366f1);
+  }
+
+  .section-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title .icon { font-size: 22px; }
+  .section-title .badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 10px;
+    margin-left: auto;
+  }
+  .badge-pink { background: rgba(244,114,182,0.2); color: #f472b6; }
+  .badge-green { background: rgba(74,222,128,0.2); color: #4ade80; }
+  .badge-amber { background: rgba(251,191,36,0.2); color: #fbbf24; }
+  .badge-purple { background: rgba(129,140,248,0.2); color: #818cf8; }
+
+  /* Highlight card */
+  .highlight-box {
+    background: linear-gradient(135deg, rgba(167,139,250,0.12), rgba(96,165,250,0.12));
+    border: 1px solid rgba(167,139,250,0.25);
+    border-radius: 12px;
+    padding: 22px;
+    margin-bottom: 16px;
+  }
+  .highlight-box h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: #e0d4ff;
+    margin-bottom: 10px;
+  }
+  .highlight-box p {
+    font-size: 14px;
+    color: #cbd5e1;
+    line-height: 1.7;
+  }
+  .highlight-box code {
+    background: rgba(0,0,0,0.3);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #93c5fd;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+  }
+
+  /* Items */
+  .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .item:last-child { border-bottom: none; }
+  .item .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+  .dot-green { background: #4ade80; box-shadow: 0 0 8px rgba(74,222,128,0.4); }
+  .dot-amber { background: #fbbf24; box-shadow: 0 0 8px rgba(251,191,36,0.4); }
+  .dot-purple { background: #818cf8; box-shadow: 0 0 8px rgba(129,140,248,0.4); }
+  .dot-cyan { background: #22d3ee; box-shadow: 0 0 8px rgba(34,211,238,0.4); }
+  .dot-pink { background: #f472b6; box-shadow: 0 0 8px rgba(244,114,182,0.4); }
+  .item .text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #cbd5e1;
+  }
+  .item .text strong {
+    color: #f1f5f9;
+    font-weight: 600;
+  }
+  .item .text .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .tag-new { background: rgba(74,222,128,0.15); color: #4ade80; }
+  .tag-hot { background: rgba(244,114,182,0.15); color: #f472b6; }
+  .tag-safe { background: rgba(34,211,238,0.15); color: #22d3ee; }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    margin-top: 32px;
+    padding: 20px;
+    color: #64748b;
+    font-size: 13px;
+  }
+  .footer .cta {
+    display: inline-block;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 12px 36px;
+    border-radius: 12px;
+    text-decoration: none;
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">🚀</div>
+    <h1>Auto-Dev 流水线重大升级</h1>
+    <div class="version">v2.0 — Release 260514</div>
+    <div class="stats">
+      <div class="stat-item">
+        <div class="num blue">+2204</div>
+        <div class="label">新增代码行</div>
+      </div>
+      <div class="stat-item">
+        <div class="num green">19</div>
+        <div class="label">新功能</div>
+      </div>
+      <div class="stat-item">
+        <div class="num amber">7</div>
+        <div class="label">问题修复</div>
+      </div>
+      <div class="stat-item">
+        <div class="num purple">29</div>
+        <div class="label">文件变更</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Highlight: Pluggable Pipeline -->
+  <div class="section highlight">
+    <div class="section-title">
+      <span class="icon">⚡</span>
+      里程碑特性：可插拔流水线引擎
+      <span class="badge badge-pink">核心升级</span>
+    </div>
+    <div class="highlight-box">
+      <h3>pipeline.yaml 配置驱动的流水线架构</h3>
+      <p>
+        全新的 <code>pipeline.yaml</code> 配置体系，让你的开发流程完全可定制。<br>
+        每个阶段（需求分析 → 编码 → 校验 → 提交 → 构建 → 部署 → 报告）都可以<strong>自由组合、替换、跳过</strong>。<br><br>
+        提供交互式配置向导 <code>configure-pipeline.py</code>，一条命令即可生成专属流水线。<br>
+        内置模板 <code>pipeline-template.yaml</code> + 详细注释，5 分钟上手。
+      </p>
+    </div>
+    <div class="highlight-box">
+      <h3>单元测试阶段正式集成 <span class="tag tag-new">NEW</span></h3>
+      <p>
+        新增 <code>stage-unit-test.md</code>，单元测试作为独立阶段接入流水线。<br>
+        支持 Java (JUnit5/TestNG)、Vue3 (Vitest/Jest)、Vue2 (Jest) 全技术栈。<br>
+        可通过 pipeline.yaml 灵活启用/禁用，不影响现有流程。
+      </p>
+    </div>
+  </div>
+
+  <!-- New Features -->
+  <div class="section feat">
+    <div class="section-title">
+      <span class="icon">✨</span>
+      新功能一览
+      <span class="badge badge-green">19 项</span>
+    </div>
+
+    <div class="item">
+      <div class="dot dot-cyan"></div>
+      <div class="text"><strong>动态技能映射</strong> — 所有 7 个阶段全部支持 <code>{TOTAL_STAGES}</code> 动态替换，阶段数不再硬编码，流水线长度自由伸缩 <span class="tag tag-hot">重要</span></div>
+    </div>
+    <div class="item">
+      <div class="dot dot-green"></div>
+      <div class="text"><strong>增强日志系统</strong> — 日志级别分级、步骤 ID 追踪、耗时统计、MCP 调用详情，问题排查效率翻倍 <span class="tag tag-hot">重要</span></div>
+    </div>
+    <div class="item">
+      <div class="dot dot-pink"></div>
+      <div class="text"><strong>完成通知升级</strong> — 微信通知增加<strong>流水线阶段执行状态一览</strong>，一目了然各阶段成功/跳过/失败情况</div>
+    </div>
+    <div class="item">
+      <div class="dot dot-green"></div>
+      <div class="text"><strong>MCP 预检查 + 标签阻断</strong> — 自动检测 MCP 服务可用性，AI-AUTO-DEV 标签异常时主动阻断，防止无效运行 <span class="tag tag-safe">稳定性</span></div>
+    </div>
+    <div class="item">
+      <div class="dot dot-green"></div>
+      <div class="text"><strong>指数退避重试</strong> — TFS 任务创建支持 5s→10s→20s 指数退避重试，网络波动不再导致流水线中断 <span class="tag tag-safe">稳定性</span></div>
+    </div>
+    <div class="item">
+      <div class="dot dot-cyan"></div>
+      <div class="text"><strong>技能可替换性约束</strong> — <code>skill-contracts.md</code> 定义技能契约，标记可替换/不可替换，防止核心阶段被误替换</div>
+    </div>
+    <div class="item">
+      <div class="dot dot-cyan"></div>
+      <div class="text"><strong>流水线配置源检测</strong> — 自动识别 pipeline.yaml 来源，消除重复配置冲突</div>
+    </div>
+    <div class="item">
+      <div class="dot dot-purple"></div>
+      <div class="text"><strong>技能接入示例</strong> — 新增 <code>examples/pm-teamB/</code> 完整示例，演示如何快速接入自定义技能团队</div>
+    </div>
+  </div>
+
+  <!-- Bug Fixes -->
+  <div class="section fix">
+    <div class="section-title">
+      <span class="icon">🔧</span>
+      问题修复
+      <span class="badge badge-amber">7 项</span>
+    </div>
+
+    <div class="item">
+      <div class="dot dot-amber"></div>
+      <div class="text"><strong>统一提交管控</strong> — 禁止中间阶段(编码/校验)执行 git commit/push，只由 Stage 5 统一提交，杜绝多次提交 <span class="tag tag-hot">关键修复</span></div>
+    </div>
+    <div class="item">
+      <div class="dot dot-amber"></div>
+      <div class="text"><strong>Stage 5 提交约束</strong> — 强制单次提交，禁止需求号混入 commit message，保持提交历史整洁</div>
+    </div>
+    <div class="item">
+      <div class="dot dot-amber"></div>
+      <div class="text"><strong>轮询安全限制</strong> — PR/构建状态轮询强制 2 分钟最小间隔，异常后禁止自动重试，避免触发限流</div>
+    </div>
+    <div class="item">
+      <div class="dot dot-amber"></div>
+      <div class="text"><strong>状态追溯补全</strong> — TFS 工作项状态变更补充 reason 参数，日志链路可完整追溯</div>
+    </div>
+    <div class="item">
+      <div class="dot dot-amber"></div>
+      <div class="text"><strong>文件路径修复</strong> — 修复 auto-dev 过程文件路径和任务状态更新不一致问题</div>
+    </div>
+  </div>
+
+  <!-- Docs & Others -->
+  <div class="section other">
+    <div class="section-title">
+      <span class="icon">📚</span>
+      文档与体验
+      <span class="badge badge-purple">6 项</span>
+    </div>
+
+    <div class="item">
+      <div class="dot dot-purple"></div>
+      <div class="text"><strong>README 全新改版</strong> — 新增可插拔流水线完整使用指南</div>
+    </div>
+    <div class="item">
+      <div class="dot dot-purple"></div>
+      <div class="text"><strong>产品配置联动</strong> — products 配置文件增加 pipeline.yaml 联动注释</div>
+    </div>
+    <div class="item">
+      <div class="dot dot-purple"></div>
+      <div class="text"><strong>SKILL.md 重构</strong> — 从静态文档升级为动态流水线引擎说明</div>
+    </div>
+    <div class="item">
+      <div class="dot dot-purple"></div>
+      <div class="text"><strong>报告模板升级</strong> — 新增流水线阶段执行状态展示区域</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="cta">升级到 Auto-Dev v2.0，体验全新可插拔流水线 🎉</div>
+    <div>Auto-Dev · 让 AI 驱动你的开发流程</div>
+  </div>
+
+</div>
+</body>
+</html>

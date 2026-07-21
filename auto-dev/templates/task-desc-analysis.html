@@ -1,0 +1,64 @@
+<!-- AI 分析任务描述模版 -->
+<!-- 占位符说明：
+  {DEMAND_TITLE}      - 需求标题
+  {DEMAND_ID}         - 需求 ID
+  {OVERVIEW}          - 需求一句话概述（来自 dev-plan.md 的 Requirement Overview）
+  {FEATURE_LIST}      - 核心功能点（来自 dev-plan.md 的 Feature List，逐条转为 <li>）
+  {TECH_SOLUTION}     - 技术方案（来自 dev-plan.md 的 Technical Solution）
+  {REPO_TABLE_ROWS}   - 涉及仓库表格行（来自 dev-plan.md 的 Repositories and Modules）
+  {WORK_ESTIMATE}     - 工作量估算（来自 PM 分析判断）
+-->
+
+<div style="font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; color: #333; line-height: 1.6;">
+
+  <!-- 需求总结 -->
+  <h3 style="border-bottom: 2px solid #0078d4; padding-bottom: 6px; color: #0078d4;">📋 需求总结</h3>
+  <table style="border-collapse: collapse; width: 100%; margin-bottom: 16px;">
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 8px 12px; background: #f5f5f5; font-weight: bold; width: 120px;">需求标题</td>
+      <td style="border: 1px solid #ddd; padding: 8px 12px;">{DEMAND_TITLE}</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 8px 12px; background: #f5f5f5; font-weight: bold;">需求 ID</td>
+      <td style="border: 1px solid #ddd; padding: 8px 12px;">{DEMAND_ID}</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 8px 12px; background: #f5f5f5; font-weight: bold;">需求概述</td>
+      <td style="border: 1px solid #ddd; padding: 8px 12px;">{OVERVIEW}</td>
+    </tr>
+  </table>
+
+  <!-- 核心功能点 -->
+  <h3 style="border-bottom: 2px solid #0078d4; padding-bottom: 6px; color: #0078d4;">🎯 核心功能点</h3>
+  <ul style="margin-bottom: 16px;">
+    {FEATURE_LIST}
+  </ul>
+
+  <!-- 技术方案 -->
+  <h3 style="border-bottom: 2px solid #0078d4; padding-bottom: 6px; color: #0078d4;">🔧 技术方案</h3>
+  <div style="background: #f9f9f9; border-left: 3px solid #0078d4; padding: 10px 14px; margin-bottom: 16px;">
+    {TECH_SOLUTION}
+  </div>
+
+  <!-- 涉及仓库 -->
+  <h3 style="border-bottom: 2px solid #0078d4; padding-bottom: 6px; color: #0078d4;">📦 涉及仓库</h3>
+  <table style="border-collapse: collapse; width: 100%; margin-bottom: 16px;">
+    <thead>
+      <tr style="background: #0078d4; color: white;">
+        <th style="border: 1px solid #ddd; padding: 8px 12px; text-align: left;">仓库</th>
+        <th style="border: 1px solid #ddd; padding: 8px 12px; text-align: left;">模块</th>
+        <th style="border: 1px solid #ddd; padding: 8px 12px; text-align: left;">变更类型</th>
+      </tr>
+    </thead>
+    <tbody>
+      {REPO_TABLE_ROWS}
+    </tbody>
+  </table>
+
+  <!-- 工作量估算 -->
+  <h3 style="border-bottom: 2px solid #0078d4; padding-bottom: 6px; color: #0078d4;">⏱️ 工作量估算</h3>
+  <div style="background: #fff3cd; border-left: 3px solid #ffc107; padding: 10px 14px;">
+    {WORK_ESTIMATE}
+  </div>
+
+</div>

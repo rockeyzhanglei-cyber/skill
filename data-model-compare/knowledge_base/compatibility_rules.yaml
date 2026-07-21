@@ -1,0 +1,243 @@
+# 字段兼容性规则配置
+#
+# 将 _is_description_compatible 中的硬编码规则外置到配置文件。
+# 每条规则定义一对"不应该匹配"的语义冲突场景。
+#
+# 规则类型 (type):
+#   keyword_check    - 关键词组合检查（最常用）
+#   prefix_check     - 前缀提取后比较
+#   granularity_check - 粒度级别检查
+#   concept_conflict - 概念冲突检查
+#
+# 动作 (action):
+#   reject           - 不兼容，拒绝匹配
+#   reject_if_xxx    - 满足条件时拒绝
+#
+# 优先级 (priority):
+#   数字越大越先检查。高优先级的规则先执行，命中即返回。
+
+compatibility_rules:
+
+  # ===== 代码 vs 名称 冲突 =====
+  code_vs_name:
+    priority: 100
+    enabled: true
+    type: keyword_check
+    description: "代码字段不应匹配到名称字段（除非涉及字典映射）"
+    conditions:
+      - target_has_any: ['代码', '编码', '代号', '编号']
+        source_has_any: ['名称', '名字']
+        source_not_has_any: ['字典', '映射']
+      - target_has_any: ['名称', '名字']
+        source_has_any: ['代码', '编码', '代号', '编号']
+        source_not_has_any: ['字典', '映射']
+    action: reject
+
+  # ===== 身份证件类别代码 vs 证件号码 =====
+  id_type_vs_number:
+    priority: 98
+    enabled: true
+    type: keyword_check
+    description: "身份证件类别代码不应匹配证件号码"
+    conditions:
+      - target_has_any: ['身份证件类别代码', 'id_type_code']
+        source_has_any: ['证件号码', '身份证号', '身份证']
+        source_not_has_any: ['类别', '类型']
+      - target_has_any: ['证件号码', '身份证号']
+        source_has_any: ['类别', '类型']
+        source_not_has_any: ['号码', '证号']
+    action: reject
+
+  # ===== 电话前缀冲突 =====
+  phone_prefix_conflict:
+    priority: 95
+    enabled: true
+    type: prefix_check
+    description: "不同前缀的电话字段不应匹配（联系人电话 ≠ 工作单位电话）"
+    trigger_keywords: ['电话', 'phone', 'tel']
+    extract_before: '电话'
+    action: reject_if_prefix_different
+
+  # ===== 固定电话 vs 手机 =====
+  landline_vs_mobile:
+    priority: 94
+    enabled: true
+    type: keyword_check
+    description: "固定电话不应匹配手机号码"
+    conditions:
+      - target_has_any: ['固定电话', '座机']
+        source_has_any: ['手机']
+      - target_has_any: ['手机']
+        source_has_any: ['固定电话', '座机']
+    action: reject
+
+  # ===== 手机号码 vs 其他电话 =====
+  mobile_vs_other_phone:
+    priority: 93
+    enabled: true
+    type: keyword_check
+    description: "手机号码不应匹配带特定前缀的电话字段"
+    conditions:
+      - target_has_any: ['工作单位电话', '联系人电话']
+        source_has_any: ['手机号码', '手机号']
+        target_not_has_any: ['手机', '移动']
+      - target_has_any: ['手机号码', '手机号']
+        source_has_any: ['工作单位电话', '联系人电话', '家庭', '办公室', '单位']
+        source_not_has_any: ['手机', '移动']
+    action: reject
+
+  # ===== 电话 vs 邮编 =====
+  phone_vs_postcode:
+    priority: 92
+    enabled: true
+    type: keyword_check
+    description: "电话号码不应匹配邮政编码"
+    conditions:
+      - target_has_any: ['电话']
+        source_has_any: ['邮编', '邮政编码']
+      - target_has_any: ['邮编', '邮政编码']
+        source_has_any: ['电话']
+    action: reject
+
+  # ===== 行政区划粒度冲突 =====
+  admin_region_granularity:
+    priority: 90
+    enabled: true
+    type: granularity_check
+    description: "通用行政区划代码不应匹配特定粒度代码"
+    granularity_levels: ['省市', '地市', '区县', '街道']
+    trigger_keywords: ['行政区划代码', 'GB/T 2260']
+    action: reject_if_target_more_specific
+
+  # ===== 出生地属性冲突 =====
+  birthplace_attr_conflict:
+    priority: 88
+    enabled: true
+    type: keyword_check
+    description: "出生地的具体属性不应匹配无属性的出生地"
+    conditions:
+      - target_has_any: ['出生地']
+        source_has_any: ['出生地']
+        target_has_attr_any: ['邮政', '省市', '地市', '区县', '街道']
+        source_not_has_attr_any: ['邮政', '省市', '地市', '区县', '街道']
+      - target_has_any: ['出生地']
+        source_has_any: ['出生地']
+        target_not_has_attr_any: ['邮政', '省市', '地市', '区县', '街道']
+        source_has_attr_any: ['邮政', '省市', '地市', '区县', '街道']
+    action: reject
+
+  # ===== 出生地 vs 常住地址 =====
+  birthplace_vs_address:
+    priority: 87
+    enabled: true
+    type: keyword_check
+    description: "出生地不应匹配常住地址"
+    conditions:
+      - target_has_any: ['出生地']
+        source_has_any: ['常住地址']
+      - target_has_any: ['常住地址']
+        source_has_any: ['出生地']
+    action: reject
+
+  # ===== 出生日期 vs 业务时间 =====
+  personal_vs_business_time:
+    priority: 85
+    enabled: true
+    type: keyword_check
+    description: "个人时间字段不应匹配业务系统时间"
+    conditions:
+      - target_has_any: ['业务', '系统', '创建', '更新', '产生']
+        source_has_any: ['出生', '生日', '年龄']
+      - target_has_any: ['出生', '生日', '年龄']
+        source_has_any: ['业务', '系统', '创建', '更新', '产生']
+    action: reject
+
+  # ===== 日期 vs 日期时间精度 =====
+  date_vs_datetime:
+    priority: 84
+    enabled: true
+    type: precision_check
+    description: "日期不应匹配日期时间（精度不同）"
+    date_keywords: ['日期']
+    time_keywords: ['时间']
+    date_types: ['D', 'D10', 'date']
+    datetime_types: ['DT', 'D19', 'datetime']
+    action: reject_if_precision_different
+
+  # ===== 住院号 vs 病案号 =====
+  admission_no_vs_emr_no:
+    priority: 83
+    enabled: true
+    type: keyword_check
+    description: "住院号和病案号是不同的标识符"
+    conditions:
+      - target_has_any: ['住院号']
+        source_has_any: ['病案号']
+      - target_has_any: ['病案号']
+        source_has_any: ['住院号']
+    action: reject
+
+  # ===== 号码 vs 类别 =====
+  number_vs_category:
+    priority: 82
+    enabled: true
+    type: keyword_check
+    description: "证件号码不应匹配类别代码"
+    conditions:
+      - target_has_any: ['号码', '证号']
+        source_has_any: ['类别', '类型']
+      - target_has_any: ['类别', '类型']
+        source_has_any: ['号码', '证号']
+    action: reject
+
+  # ===== 代码字段 vs 地址字段 =====
+  code_vs_address:
+    priority: 81
+    enabled: true
+    type: keyword_check
+    description: "代码字段不应匹配地址字段"
+    conditions:
+      - target_has_any: ['代码', '编码']
+        source_has_any: ['地址']
+        source_not_has_any: ['代码', '编码']
+      - target_has_any: ['地址']
+        target_not_has_any: ['代码', '编码']
+        source_has_any: ['代码', '编码']
+    action: reject
+
+  # ===== 地址粒度冲突 =====
+  address_granularity:
+    priority: 80
+    enabled: true
+    type: keyword_check
+    description: "子地址组件不应匹配不同类型的完整地址"
+    conditions:
+      - target_has_any: ['详细地址', '门牌号', '门牌号码']
+        source_has_any: ['户口地址', '居住地址', '户籍地址', '现住址', '联系地址', '住址']
+      - target_has_any: ['户口地址', '居住地址', '户籍地址', '现住址', '联系地址', '住址']
+        source_has_any: ['详细地址', '门牌号', '门牌号码']
+    action: reject
+
+  # ===== 出生地邮政代码 vs 出生地 =====
+  birthplace_postcode_vs_birthplace:
+    priority: 79
+    enabled: true
+    type: keyword_check
+    description: "出生地邮政代码不应匹配出生地"
+    conditions:
+      - target_has_any: ['邮政代码', '邮编']
+        source_has_any: ['出生地']
+        source_not_has_any: ['邮政', '邮编']
+    action: reject
+
+  # ===== 控制字段映射 =====
+  control_field_mapping:
+    priority: 78
+    enabled: true
+    type: keyword_check
+    description: "控制字段应映射到修改标志类字段"
+    conditions:
+      - target_has_any: ['状态标识', '上传标识', '删除标识']
+        source_not_has_any: ['修改标志', '修改标识', 'XGBZ', '状态', '标志']
+    action: reject
+    note: "需要额外检查 target_field.name 是否在控制字段列表中"

@@ -1,0 +1,205 @@
+# 已学习的表映射
+# 从历史比对中积累的映射关系，供后续比对复用
+# 通用格式，不绑定特定标准版本
+# learned_from 记录映射的学习来源，便于追溯
+
+table_mappings:
+  # ===== 基础目录 =====
+  JBYHRYXXB:
+    target: null
+    confidence: 0.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "原标准的医护人员信息表在省平台中分散到多个表"
+
+  JBKSXXB:
+    target: hos_org
+    confidence: 0.6
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "科室信息部分对应到医疗机构信息表"
+
+  JBBRJBXXB:
+    target: m_patient
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "患者基本信息表完全对应"
+
+  # ===== 门急诊 =====
+  MZGHB:
+    target: m_cli_register
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "门诊挂号表 → 门急诊挂号表"
+
+  MZJZJLB:
+    target: m_cli_records
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "门诊就诊记录表 → 门急诊就诊记录表"
+
+  EMR_MJZBL:
+    target: m_emr_base
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "门(急)诊病历 → 门急诊病历"
+
+  MZYZMXB:
+    target: m_cli_advices_undrug
+    target_alt: m_cli_advices_drug
+    confidence: 0.9
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "门诊医嘱明细表 → 门急诊非药品/药品医嘱表（需根据医嘱类型拆分）"
+
+  MZSFJLB:
+    target: m_cli_charge_header
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "门诊收费记录表 → 门急诊收费记录表"
+
+  MZSFMXB:
+    target: m_cli_charge_detail
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "门诊收费明细表 → 门急诊收费明细表"
+
+  # ===== 住院 =====
+  ZYJZJLB:
+    target: m_res_records
+    confidence: 0.8
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "住院就诊记录表 → 住院登记信息（部分对应）"
+
+  ZYYZMXB:
+    target: m_res_advices_undrug
+    target_alt: m_res_advices_drug
+    confidence: 0.9
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "住院医嘱明细表 → 住院非药品/药品医嘱表（需拆分）"
+
+  ZYSFJLB:
+    target: m_res_charge_header
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "出院患者收费记录表 → 住院收费记录表"
+
+  ZYSFMXB:
+    target: m_res_charge_detail
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "出院患者收费明细表 → 住院收费明细表"
+
+  ZYCYDJB:
+    target: m_res_out_records
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "出院登记信息 → 出院登记信息"
+
+  # ===== 病历文书 =====
+  EMR_RYJL:
+    target: m_emr_in_record
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "入院记录 → 入院记录"
+
+  EMR_ZKJL:
+    target: m_emr_transfer_dep
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "转科记录 → 转科记录"
+
+  EMR_HZJL:
+    target: m_emr_remote_consult
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "会诊记录 → 会诊记录"
+
+  EMR_JZLGBL:
+    target: m_emr_observation_base
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "急诊留观病历 → 急诊留观病历"
+
+  ZYSSJLBG:
+    target: m_emr_operation
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "手术记录 → 手术/操作记录"
+
+  ZLJL:
+    target: m_emr_cure
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "治疗记录 → 治疗记录"
+
+  SXJLB:
+    target: m_emr_blood
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "输血记录表 → 输血记录"
+
+  JCJLB:
+    target: m_pacs_header
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "检查记录表 → 检查记录表"
+
+  JYJLB:
+    target: m_lis_header
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "检验记录表 → 检验记录表"
+
+  TJZJB:
+    target: m_emr_exam
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "体检总检表 → 体检总检表"
+
+  BA_SYJBK:
+    target: m_emr_hp_tcm
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "中医病案首页 → 中医病案首页"
+
+  # ===== 不良事件 =====
+  BLSJ_YZBLSJ:
+    target: m_emr_serious_adverse
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "严重不良事件报告 → 不良事件-严重不良事件报告"
+
+  BLSJ_YLAQSJ:
+    target: m_emr_medisafety_adverse
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "医疗安全事件报告 → 不良事件-医疗安全事件"
+
+  BLSJ_YPBLSJ:
+    target: m_emr_drug_adverse
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "药品不良事件 → 不良事件-药品不良事件"
+
+  # ===== 运营 =====
+  HRP_HUMAN:
+    target: null
+    confidence: 0.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "人员基本信息在省平台中无直接对应"
+
+  HRP_DRUG_RECEIVING:
+    target: hos_medicine_outin
+    confidence: 0.7
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "药品入库明细 → 药品出入库明细（部分对应）"
+
+  HRP_SUPPLIES_RECEIVING:
+    target: hos_material_outin
+    confidence: 0.7
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "材料入库明细 → 材料出入库信息（部分对应）"
+
+  YP_TJLSK:
+    target: hos_medicine_price_his
+    confidence: 1.0
+    learned_from: "v5.5_vs_v1.4.1"
+    note: "药品调价历史 → 药品调价信息"

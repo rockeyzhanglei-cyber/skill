@@ -1,0 +1,186 @@
+# 数据模型修订配置文件
+# 用于配置文档目录、BMS后端程序路径等本地路径
+#
+# 使用方式：
+# 1. 复制本模板到用户目录：cp model-revision.yaml ~/model-revision.yaml
+# 2. 根据本地实际情况修改路径配置
+# 3. Skill会自动读取 ~/model-revision.yaml 配置
+
+# ========== 文档目录配置 ==========
+documents:
+  # 5.x版本文档目录
+  v5x:
+    paths:
+      - "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/02 V5.5/01 产品文档/02 标准规范/库表接入规范"
+    # 5.x版本生成的数据库类型
+    db_types: ["sqlserver", "oracle"]
+    # 是否需要生成修订记录脚本
+    need_revise_record: false
+    # 是否需要生成数据标准基础数据同步脚本（将表结构存入edsm_*表）
+    need_standard_data_sync: false
+
+  # 6.0版本公版文档目录
+  v60:
+    paths:
+      - "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/03 V6.0/01 产品文档/01 标准规范"
+    # 6.0版本生成的数据库类型（Greenplum/PostgreSQL）
+    db_types: ["greenplum"]
+    # 是否需要生成修订记录脚本
+    need_revise_record: true
+    # 是否需要生成EDIMS同步脚本
+    need_edims_sync: true
+    # is_standard=1（公版标准）
+    is_standard: 1
+    # 标准ID前缀说明：
+    # standard_id需要根据修订文档动态确定，不是固定值
+    # 对应关系：
+    # - 第01部分：医疗服务 → winning-plat-01
+    # - 第02部分：公共卫生 → winning-plat-02
+    # - 第03部分：全员人口 → winning-plat-03
+    # - ...以此类推
+    # 下面的值仅作为默认值，实际使用时应从文档名称推断（如"第02部分：公共卫生" → winning-plat-02）
+    standard_id: "winning-plat-01"
+    # 标准名称
+    standard_name: "区域卫生信息平台数据标准"
+
+  # 6.0版本项目化文档目录
+  # 项目化标准也在V6.0版本下，因此db_types/need_revise_record与公版一致
+  # 区别：is_standard=0，且需填写project_code
+  project:
+    paths:
+      - "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/03 V6.0/01 产品文档/02 标准规范（项目化）"
+    db_types: ["greenplum"]
+    need_revise_record: true
+    need_edims_sync: true
+    is_standard: 0
+
+
+# ========== BMS后端程序配置 ==========
+bms:
+  # BMS后端程序根目录
+  root_path: "/Users/zhanglei/winning/git/winning-dps-rda-bms"
+
+  # DDL脚本提交路径（按数据库类型分目录）
+  ddl_script_paths:
+    greenplum: "${bms.root_path}/winning-dps-rda-bms-server/src/main/resources/edsm_sql/greenplum"
+    oracle: "${bms.root_path}/winning-dps-rda-bms-server/src/main/resources/edsm_sql/oracle"
+    sqlserver: "${bms.root_path}/winning-dps-rda-bms-server/src/main/resources/edsm_sql/sqlserver"
+    postgresql: "${bms.root_path}/winning-dps-rda-bms-server/src/main/resources/edsm_sql/postgresql"
+
+  # 修订记录脚本提交路径（用于6.0版本）
+  revise_record_path: "${bms.root_path}/winning-dps-rda-bms-server/src/main/resources/system_sql/rhdp_app/postgresql"
+
+  # 数据标准基础数据同步脚本提交路径（用于6.0版本，将表结构存入edsm_*表）
+  standard_data_sync_path: "${bms.root_path}/winning-dps-rda-bms-server/src/main/resources/system_sql/rhdp_dw/greenplum"
+
+
+# ========== 版本判断规则 ==========
+version_detection:
+  # 从需求判断版本（检查需求标题/描述中的关键词）
+  from_requirement:
+    keywords:
+      v5x: ["5.x", "5.5", "V5", "v5", "五点", "库表接入"]
+      v60: ["6.0", "V6", "v6", "公版", "六点", "标准模型"]
+      project: ["项目化", "项目定制", "定制", "客户", "项目标准"]
+
+  # 从文档路径判断版本（检查路径中的特征）
+  from_path:
+    patterns:
+      v5x: ["库表接入规范", "V5.5", "5.x", "02 标准规范"]
+      v60: ["03 V6.0", "01 产品文档/01 标准规范", "01 标准规范"]
+      project: ["02 标准规范（项目化）", "标准规范（项目化）"]
+
+  # 从文档名称判断版本
+  from_doc_name:
+    patterns:
+      v5x: []
+      v60: ["数据标准", "标准规范"]
+      project: ["项目化", "定制"]
+
+  # 版本+项目匹配逻辑（重要）
+  # 1. 先判断是 v5x / v60 / project 版本
+  # 2. v60 公版 → is_standard=1，project_code 为空
+  # 3. v60 项目化 → is_standard=0，project_code 必填
+  # 4. 项目化路径结构：{project_root}/{project_code} {project_name}/...
+  #    如：02 标准规范（项目化）/001 深圳市罗湖区妇幼保健院/
+  #    从目录名提取 project_code 的前缀数字和简称
+
+
+# ========== 项目编码规则 ==========
+project_code:
+  # 项目编码格式：PRJ-{3位序号}-{大写简称}
+  # 序号：与项目文件夹的3位数字编号对应（001、002...）
+  # 简称：项目名称的拼音首字母缩写（2~6个大写字母）
+  #
+  # 示例：
+  #   "001 深圳市罗湖区妇幼保健院" → PRJ-001-SZLH
+  #   "002 北京电子病历共享工程二期" → PRJ-002-BJDZ
+  #   "010 浙江省电子健康档案项目" → PRJ-010-ZJ
+  #
+  # 作用：
+  # - 一眼看出是哪个项目（序号对应TFS文件夹，简称对应地名/项目名）
+  # - edsm_revise_record.project_code 字段填写此值
+  # - is_standard=0 时必填，is_standard=1 时留空
+  format: "PRJ-{seq}-{abbr}"
+  # 已知项目编码映射（可扩展）
+  known_projects:
+    "001 深圳市罗湖区妇幼保健院": "PRJ-001-SZLH"
+    "002 北京电子病历共享工程二期": "PRJ-002-BJDZ"
+    "003 北京基层社区平台": "PRJ-003-BJJC"
+    "004 郑州市区域平台项目": "PRJ-004-ZZ"
+    "005 张家港市区域平台项目": "PRJ-005-ZJG"
+    "006 盐都区区域平台项目": "PRJ-006-YD"
+    "007 六合区区域平台项目": "PRJ-007-LH"
+    "008 如东市区域平台项目": "PRJ-008-RD"
+    "009 斗门区区域平台项目": "PRJ-009-DM"
+    "010 浙江省电子健康档案项目": "PRJ-010-ZJ"
+    "011 阳泉市区域平台项目": "PRJ-011-YQ"
+    "012 汉中市区域平台项目": "PRJ-012-HZ"
+    "013 武汉市疫情分析平台": "PRJ-013-WH"
+    "014 安徽区域标准规范": "PRJ-014-AH"
+    "015 岳阳市区域平台项目": "PRJ-015-YY"
+    "016 马鞍山市区域平台项目": "PRJ-016-MAS"
+
+
+# ========== TFS配置 ==========
+tfs:
+  # TFS集合URL
+  collection_url: "https://tfs.winning.com.cn/tfs/WN_Data_Platform"
+  # 用于判断版本的字段
+  version_field: "Winning.Module.name"
+
+
+# ========== 脚本生成配置 ==========
+script_generation:
+  # Flyway脚本命名格式
+  flyway:
+    ddl_prefix: "V"  # 脚本前缀
+    timestamp_format: "%Y%m%d%H%M%S"  # 时间戳格式
+    separator: "__"  # 分隔符
+    suffix: ".sql"   # 后缀
+
+  # 修订记录脚本命名
+  revise_record:
+    prefix: "V"
+    template: "{prefix}{timestamp}{separator}insert_revise_record.sql"
+
+  # DDL脚本内容格式
+  ddl:
+    case: "lower"  # 字段名大小写：lower/upper/original
+    add_if_not_exists: true  # 新增字段时检查是否存在
+    add_comment: true  # 是否生成字段注释
+
+
+# ========== 其他配置 ==========
+other:
+  # 输出目录（默认为Downloads）
+  output_dir: "~/Downloads"
+
+  # 是否自动提交到git
+  auto_git_commit: false
+
+  # git提交分支（仅当auto_git_commit=true时生效）
+  git_branch: "develop"
+
+  # 是否发送企微通知
+  send_wechat_notify: false

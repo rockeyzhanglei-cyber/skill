@@ -1,0 +1,75 @@
+# 序号字段组配置
+# 用于处理"目标标准用序号字段、原标准用主子表"的场景
+#
+# 典型场景：
+# - 目标标准（省平台）的病案首页中，诊断和手术以序号字段存储：
+#   出院西医其他诊断疾病代码1、出院西医其他诊断疾病名称1、入院病情(对应其他诊断1)、治疗转归(对应其他诊断1)
+#   其他手术操作代码1、其他手术操作名称1、其他手术操作麻醉医师1、其他手术操作切口愈合等级1
+# - 原标准（云南v5.5）使用主子表结构：
+#   病案首页表（主表）+ 病案首页诊断表（子表，一行一个诊断）+ 病案首页手术表（子表，一行一个手术）
+#
+# 匹配策略：
+# 1. 检测目标表中的序号字段组
+# 2. 查找原标准中对应的子表
+# 3. 如果子表包含对应的字段结构，则认为序号字段组被覆盖
+# 4. 未匹配的字段应添加到子表而非主表
+# 5. 在报告中标注为"主子表映射"
+
+numbered_field_groups:
+
+  # 病案首页 - 诊断序号字段
+  # 目标标准: m_emr_hp 表中的各种诊断相关字段（带序号）
+  # 原标准: BA_SYJBK（主表）+ BA_SYZDK（诊断子表）
+  diagnosis_numbered:
+    # 序号字段匹配模式（正则表达式）
+    # 匹配各种诊断相关字段：
+    # - 出院西医其他诊断疾病代码1、出院西医其他诊断疾病名称1
+    # - 入院病情(对应其他诊断1)、治疗转归(对应其他诊断1)
+    # - 出院主要诊断疾病代码、出院主要诊断疾病名称
+    patterns:
+      - "诊断.{0,30}(代码|名称|编码)\\d*$"  # 诊断xxx代码/名称 + 可选数字
+      - "诊断\\d+.{0,20}(代码|名称|编码)"     # 诊断+数字+xxx+代码/名称
+      - "\\(对应.{0,10}诊断\\d+\\)"          # (对应xxx诊断1) 格式
+      - "对应.{0,10}诊断\\d+"                # 对应xxx诊断1 格式
+      - "诊断类型\\d+"                       # 诊断类型1
+      - "诊断代码\\d+"                       # 诊断代码1
+    # 对应的原标准子表
+    source_sub_table: "BA_SYZDK"
+    # 子表中对应的字段（用于验证子表是否包含对应的字段结构）
+    sub_table_fields:
+      - chinese_keywords: ["诊断", "代码"]
+        field_role: "code"
+      - chinese_keywords: ["诊断", "名称"]
+        field_role: "name"
+    # 报告中的描述
+    description: "诊断序号字段组对应原标准的诊断子表"
+    # 新增字段应添加到此子表
+    new_fields_target: "BA_SYZDK"
+
+  # 病案首页 - 手术序号字段
+  surgery_numbered:
+    patterns:
+      - "手术.{0,30}(代码|名称|编码|级别|类型|医师|等级|切口)\\d*$"  # 手术xxx + 可选数字
+      - "手术\\d+.{0,20}(代码|名称|编码|级别|类型)"                  # 手术+数字+xxx
+      - "其他手术.{0,30}\\d+$"                                      # 其他手术xxx+数字
+    source_sub_table: "BA_SYSSK"
+    sub_table_fields:
+      - chinese_keywords: ["手术", "代码"]
+        field_role: "code"
+      - chinese_keywords: ["手术", "名称"]
+        field_role: "name"
+    description: "手术序号字段组对应原标准的手术子表"
+    new_fields_target: "BA_SYSSK"
+
+# 适用此策略的目标表
+# 格式: 目标表名(英文名) → 使用的序号字段组
+target_tables:
+  "*住院病案首页(m_emr_hp)":
+    groups: ["diagnosis_numbered", "surgery_numbered"]
+  "*中医病案首页(m_emr_hp_tcm)":
+    groups: ["diagnosis_numbered", "surgery_numbered"]
+  "住院病案首页":
+    groups: ["diagnosis_numbered", "surgery_numbered"]
+  "中医病案首页":
+    groups: ["diagnosis_numbered", "surgery_numbered"]
+

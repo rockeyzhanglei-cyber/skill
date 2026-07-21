@@ -1,0 +1,138 @@
+details:
+- description: 患者姓名精确匹配
+  id: correct_001
+  message: ✓ 正确匹配
+  passed: true
+  rule: ''
+- description: 性别代码精确匹配
+  id: correct_002
+  message: ✓ 正确匹配
+  passed: true
+  rule: ''
+- description: 出生日期语义匹配
+  id: correct_003
+  message: ✓ 正确匹配
+  passed: true
+  rule: ''
+- description: 医疗保险类别代码字段映射
+  id: correct_004
+  message: ✓ 正确匹配
+  passed: true
+  rule: ''
+- description: 身份证件类别代码不应匹配证件号码
+  id: incorrect_001
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 5.1 身份证件类别代码 vs 证件号码
+- description: 工作单位电话不应匹配手机号码
+  id: incorrect_002
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 5.2 工作单位电话 vs 手机号码
+- description: 联系人电话不应匹配手机号码
+  id: incorrect_003
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 5.3 联系人电话 vs 手机号码
+- description: 出生地邮政代码不应匹配出生地
+  id: incorrect_004
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 5.4 出生地邮政代码 vs 出生地
+- description: 居住地行政区划代码不应匹配完整地址
+  id: incorrect_005
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 5.5 行政区划代码 vs 完整地址
+- description: 联系人姓名不应识别为字典项
+  id: incorrect_006
+  message: ✓ 正确识别为非字典项
+  passed: true
+  rule: 字典检测排除模式
+- description: 居住地地市代码不应匹配到常住地址行政区划代码
+  id: incorrect_007
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 5.5 行政区划代码 vs 完整地址
+- description: 联系人电话不应匹配到电话号码
+  id: incorrect_008
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 5.6 电话前缀差异
+- description: 职业类别代码匹配
+  id: edge_001
+  message: ✓ 正确匹配
+  passed: true
+  rule: ''
+- description: 婚姻状况代码匹配
+  id: edge_002
+  message: ✓ 正确匹配
+  passed: true
+  rule: ''
+- description: 出生地行政区划代码不应匹配常住地址行政区划代码
+  id: edge_003
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 出生地属性冲突
+- description: 关键药品代码不应匹配关键药物用法
+  id: keyword_001
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'keyword: 代码vs用法'
+- description: 检查报告结果客观所见不应匹配检查结果代码
+  id: keyword_002
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'keyword: 描述vs代码'
+- description: 报告发布人（检验医师）姓名不应匹配检验医师工号
+  id: keyword_003
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'keyword: 姓名vs工号'
+- description: 住院医师签名不应匹配转出医师签名
+  id: keyword_004
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'keyword: 角色不同'
+- description: 报告医师代码不应匹配报告医疗机构代码
+  id: keyword_005
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'keyword: 主体不同'
+- description: 会诊医师流水号不应匹配会诊记录流水号
+  id: keyword_006
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'keyword: 主体不同'
+- description: 会诊医师所属科室代码不应匹配会诊医师工号
+  id: keyword_007
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'keyword: 科室vs工号'
+- description: 严重不良事件与实验药的关系代码不应匹配不良事件报告类型代码
+  id: keyword_008
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'keyword: 关系vs类型'
+- description: 检查结果参考值(定性)不应匹配检查所见
+  id: synonym_001
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'synonym: 参考值vs所见'
+- description: 记录医师姓名不应匹配患者姓名
+  id: synonym_002
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'synonym: 身份不同'
+- description: 退号操作员姓名不应匹配挂号操作员姓名
+  id: synonym_003
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'synonym: 操作不同'
+- description: 出生地-省市代码不应映射到出生地（通用字段）
+  id: std_ref_001
+  message: ✓ 正确拒绝
+  passed: true
+  rule: 'field_mapping: 粒度检查'
+failed: 0
+passed: 27

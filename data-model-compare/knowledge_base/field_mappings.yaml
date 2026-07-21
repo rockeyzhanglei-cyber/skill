@@ -1,0 +1,423 @@
+# 字段映射配置
+# 用于定义通用的字段映射规则，特别是多对一映射场景
+# 格式：
+# field_mappings:
+#   - target_fields: [目标字段列表]
+#     source_field: 原标准字段名
+#     description: 映射说明
+
+field_mappings:
+  # 数据状态控制字段映射
+  # 省平台用多个字段表示数据状态（status/up_flag/del_flag），
+  # 原标准用单个字段（XGBZ）表示
+  - target_fields:
+      - status         # 数据状态标识：0=正常, 1=停用
+      - up_flag        # 数据上传标识：1=新增, 2=覆盖或更新
+      - del_flag       # 数据删除标识：0=正常, 1=删除
+    source_field: XGBZ  # 修改标志：1=新增, 2=修改, 3=作废
+    description: "数据状态控制字段映射，多个目标字段映射到一个源字段"
+    match_type: "control_field"
+
+  # 医疗保险类别代码映射
+  # 省平台的"医疗保险类别代码"对应原标准的"医疗费用支付方式"
+  - target_fields:
+      - insurance_type_code  # 医疗保险类别代码
+    source_field: BXLX   # 医疗费用支付方式
+    description: "医疗保险类别代码映射到医疗费用支付方式"
+    match_type: "semantic_mapping"
+
+  # 户籍地详细地址映射
+  # 省平台的"户籍地-详细地址"对应原标准的"户口地址"
+  - target_fields:
+      - reg_detail  # 户籍地-详细地址
+    source_field: HKDZ  # 户口地址
+    description: "户籍地详细地址映射到户口地址"
+    match_type: "semantic_mapping"
+
+  # 户籍地邮政代码映射
+  # 省平台的"户籍地-邮政代码"对应原标准的"户口地址邮编"
+  - target_fields:
+      - reg_postcode  # 户籍地-邮政代码
+    source_field: HKDZYB  # 户口地址邮编
+    description: "户籍地邮政代码映射到户口地址邮编"
+    match_type: "semantic_mapping"
+
+  # 出生地行政区划代码映射
+  # 省平台的"出生地-行政区划代码"对应原标准的"出生地"
+  # 两者都引用GB/T 2260标准
+  - target_fields:
+      - birth_area_code  # 出生地-行政区划代码
+    source_field: CSD  # 出生地（参见GB/T 2260-2007）
+    description: "出生地行政区划代码映射到出生地字段（通用）"
+    match_type: "standard_reference"
+    # 注意：特定粒度的代码（省市/地市/区县等）需要通过keyword/exact匹配到对应的粒度字段
+    # 不应通过此通用映射匹配到CSD
+
+  # 新生儿出生体重映射
+  # 省平台的 b_weight_1~5 对应原标准的 XSECSTZ~XSECSTZ5（1孩~5孩）
+  # 省平台的 in_hp_weight 对应原标准的 XSERYTZ
+  - target_fields:
+      - b_weight_1  # 新生儿出生体重(一孩)
+    source_field: XSECSTZ  # 新生儿出生体重（1孩）
+    description: "新生儿出生体重(一孩)映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - b_weight_2  # 新生儿出生体重(二孩)
+    source_field: XSECSTZ2  # 新生儿出生体重（2孩）
+    description: "新生儿出生体重(二孩)映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - b_weight_3  # 新生儿出生体重(三孩)
+    source_field: XSECSTZ3  # 新生儿出生体重（3孩）
+    description: "新生儿出生体重(三孩)映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - b_weight_4  # 新生儿出生体重(四孩)
+    source_field: XSECSTZ4  # 新生儿出生体重（4孩）
+    description: "新生儿出生体重(四孩)映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - b_weight_5  # 新生儿出生体重(五孩)
+    source_field: XSECSTZ5  # 新生儿出生体重（5孩）
+    description: "新生儿出生体重(五孩)映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - in_hp_weight  # 新生儿入院体重
+    source_field: XSERYTZ  # 新生儿入院体重
+    description: "新生儿入院体重映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - b_weight  # 新生儿出生体重（通用，不区分孩次）
+    source_field: XSECSTZ  # 新生儿出生体重（1孩）
+    description: "新生儿出生体重（通用）映射到1孩字段"
+    match_type: "semantic_mapping"
+
+  # 居住地详细地址映射
+  # 省平台的"居住地-详细地址"对应原标准的"居住地址"
+  - target_fields:
+      - addr_detail  # 居住地-详细地址
+    source_field: JZDZ  # 居住地址
+    description: "居住地详细地址映射到居住地址"
+    match_type: "semantic_mapping"
+
+  # 居住地行政区划代码映射
+  # 省平台的"居住地-行政区划代码"对应原标准的"常住地址-行政区划代码"
+  - target_fields:
+      - addr_area_code  # 居住地-行政区划代码
+    source_field: XZQHDM  # 常住地址-行政区划代码
+    description: "居住地行政区划代码映射到常住地址行政区划代码"
+    match_type: "semantic_mapping"
+
+  # 业务数据更新日期时间映射
+  # 省平台的"业务数据更新日期时间"对应原标准的"更新日期时间"
+  - target_fields:
+      - update_time  # 业务数据更新日期时间
+    source_field: GXSJ  # 更新日期时间
+    description: "业务数据更新日期时间映射到更新日期时间（通用）"
+    match_type: "semantic_mapping"
+
+  # 业务数据产生日期时间映射
+  # 省平台的"业务数据产生日期时间"对应原标准的"数据生成日期时间"
+  - target_fields:
+      - create_time  # 业务数据产生日期时间
+    source_field: YWSCSJ  # 数据生成日期时间
+    description: "业务数据产生日期时间映射到数据生成日期时间（通用）"
+    match_type: "semantic_mapping"
+
+  # ========== 门诊/住院摘要 字段映射 ==========
+  # 源表: 卫生事件摘要(WSSJZY)
+  - target_fields:
+      - hosp_times  # 住院次数
+    source_field: RYCS  # 入院次数
+    source_table: BA_SYJBK  # 西医病案首页
+    description: "住院次数映射到入院次数"
+    match_type: "semantic_mapping"
+
+  - target_fields:
+      - inp_no  # 住院号
+    source_field: ZYH  # 住院号
+    source_table: WSSJZY  # 卫生事件摘要
+    description: "住院号映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - outp_no  # 门(急)诊号
+    source_field: MJZH  # 门(急)诊号
+    source_table: WSSJZY
+    description: "门(急)诊号映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - visit_date  # 就诊日期时间
+    source_field: JZRQSJ  # 就诊日期时间
+    source_table: WSSJZY
+    description: "就诊日期时间映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - inp_date  # 入院日期时间
+    source_field: RYRQSJ  # 入院日期时间
+    source_table: WSSJZY
+    description: "入院日期时间映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - outp_date  # 出院日期时间
+    source_field: CYRQSJ  # 出院日期时间
+    source_table: WSSJZY
+    description: "出院日期时间映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - dis_date  # 发病日期时间
+    source_field: FBRQSJ  # 发病日期时间
+    source_table: WSSJZY
+    description: "发病日期时间映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - diag_reason  # 就诊原因
+    source_field: JZYY  # 就诊原因
+    source_table: WSSJZY
+    description: "就诊原因映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - wm_diag_code  # 西医诊断代码
+    source_field: XYZDDM  # 西医诊断编码
+    source_table: WSSJZY
+    description: "西医诊断代码映射"
+    match_type: "semantic_mapping"
+
+  - target_fields:
+      - wm_diag_name  # 西医诊断名称
+    source_field: XYZDMC  # 西医诊断名称
+    source_table: WSSJZY
+    description: "西医诊断名称映射"
+    match_type: "semantic_mapping"
+
+  - target_fields:
+      - cm_diag_code  # 中医病名代码
+    source_field: ZYBMDM  # 中医病名代码
+    source_table: WSSJZY
+    description: "中医病名代码映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - cm_diag_name  # 中医病名名称
+    source_field: ZYBMMC  # 中医病名名称
+    source_table: WSSJZY
+    description: "中医病名名称映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - cm_symptom_code  # 中医证候代码
+    source_field: ZYZHDM  # 中医症候代码
+    source_table: WSSJZY
+    description: "中医证候代码映射"
+    match_type: "semantic_mapping"
+
+  - target_fields:
+      - cm_symptom_name  # 中医证候名称
+    source_field: ZYZHMC  # 中医症候名称
+    source_table: WSSJZY
+    description: "中医证候名称映射"
+    match_type: "semantic_mapping"
+
+  - target_fields:
+      - other_wm_diag_code  # 其他西医诊断代码
+    source_field: QTXYDM  # 其他西医诊断代码
+    source_table: WSSJZY
+    description: "其他西医诊断代码映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - other_wm_diag_name  # 其他西医诊断名称
+    source_field: QTXYMC  # 其他西医诊断名称
+    source_table: WSSJZY
+    description: "其他西医诊断名称映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - opera_code  # 手术及操作代码
+    source_field: SSJCZBM  # 手术及操作编码
+    source_table: WSSJZY
+    description: "手术及操作代码映射"
+    match_type: "semantic_mapping"
+
+  - target_fields:
+      - key_drug_name  # 关键药品名称
+    source_field: GJYWMC  # 关键药物名称
+    source_table: WSSJZY
+    description: "关键药品名称映射到关键药物名称"
+    match_type: "semantic_mapping"
+
+  - target_fields:
+      - key_use_drug_name  # 关键药物使用途径名称
+    source_field: GJYWYF  # 关键药物用法
+    source_table: WSSJZY
+    description: "关键药物使用途径名称映射到关键药物用法"
+    match_type: "semantic_mapping"
+
+  - target_fields:
+      - drug_reaction  # 药物不良反应
+    source_field: YWBLFYQK  # 药物不良反应情况
+    source_table: WSSJZY
+    description: "药物不良反应映射"
+    match_type: "semantic_mapping"
+
+  - target_fields:
+      - cm_cate_code  # 中药使用类别代码
+    source_field: ZYSYLBDM  # 中药使用类别代码
+    source_table: WSSJZY
+    description: "中药使用类别代码映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - other_measure  # 其他医学处置
+    source_field: QTYXCZ  # 其他医学处置
+    source_table: WSSJZY
+    description: "其他医学处置映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - diag_condition_code  # 病情转归代码
+    source_field: BQZGDM  # 病情转归代码
+    source_table: WSSJZY
+    description: "病情转归代码映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - duty_doc_sign  # 责任医师姓名
+    source_field: ZRYSXM  # 责任医师姓名
+    source_table: WSSJZY
+    description: "责任医师姓名映射"
+    match_type: "exact_chinese"
+
+  # ========== 基本健康信息(JBJKXX) 病史字段映射 ==========
+  - target_fields:
+      - med  # 疾病史(含外伤)
+    source_field: JBSHWS  # 疾病史(含外伤)
+    source_table: JBJKXX  # 基本健康信息
+    description: "疾病史(含外伤)映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - infection  # 传染病史
+    source_field: CRBS  # 传染病史
+    source_table: JBJKXX
+    description: "传染病史映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - vaccinate  # 预防接种史
+    source_field: YFJZS  # 预防接种史
+    source_table: JBJKXX
+    description: "预防接种史映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - opera_history  # 手术史
+    source_field: SSS  # 手术史
+    source_table: JBJKXX
+    description: "手术史映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - blood  # 输血史
+    source_field: SXS  # 输血史
+    source_table: JBJKXX
+    description: "输血史映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - allergy  # 过敏史
+    source_field: GMS  # 过敏史
+    source_table: JBJKXX
+    description: "过敏史映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - personal  # 个人史
+    source_field: GRS  # 个人史
+    source_table: JBJKXX
+    description: "个人史映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - obstertical  # 婚育史
+    source_field: HYS  # 婚育史
+    source_table: JBJKXX
+    description: "婚育史映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - menstruation  # 月经史
+    source_field: YJS  # 月经史
+    source_table: JBJKXX
+    description: "月经史映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - family_illness  # 家族史
+    source_field: JZS  # 家族史
+    source_table: JBJKXX
+    description: "家族史映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - present_illness  # 现病史
+    source_field: XBS  # 现病史
+    source_table: JBJKXX
+    description: "现病史映射"
+    match_type: "exact_chinese"
+
+  - target_fields:
+      - past_illness  # 既往史
+    source_field: JWS  # 既往史
+    source_table: JBJKXX
+    description: "既往史映射"
+    match_type: "exact_chinese"
+
+  # 数据上传标识和删除标识映射到修改标志
+  - target_fields:
+      - up_flag        # 数据上传标识
+      - del_flag       # 数据删除标识
+    source_field: XGBZ  # 修改标志
+    source_table: JBBRJBXXB  # 患者基本信息表
+    description: "数据上传标识和数据删除标识映射到修改标志"
+    match_type: "control_field"
+
+  # 数据上传标识和删除标识映射到修改标志（用户确认）
+  - target_fields:
+      - up_flag        # 数据上传标识
+      - del_flag       # 数据删除标识
+    source_field: XGBZ  # 修改标志
+    source_table: JBBRJBXXB  # 患者基本信息表
+    description: "数据上传标识和数据删除标识映射到修改标志（用户确认）"
+    match_type: "control_field"
+
+  # 数据上传标识和删除标识映射到修改标志（中文名版本）
+  - target_fields:
+      - 数据上传标识
+      - 数据删除标识
+    source_field: XGBZ  # 修改标志
+    source_table: JBBRJBXXB  # 患者基本信息表
+    description: "数据上传标识和数据删除标识映射到修改标志（中文名）"
+    match_type: "control_field"
+
+  # 数据上传标识和删除标识映射到修改标志（带中文名source_field）
+  - target_fields:
+      - 数据上传标识
+      - 数据删除标识
+    source_field: XGBZ
+    source_field_cn: 修改标志
+    source_table: JBBRJBXXB
+    description: "数据上传标识和数据删除标识映射到修改标志（带中文名）"
+    match_type: "control_field"

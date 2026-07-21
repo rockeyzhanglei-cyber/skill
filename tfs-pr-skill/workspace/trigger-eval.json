@@ -1,0 +1,23 @@
+[
+  {"query": "创建一个 PR 把 feature/login 分支合并到 master", "should_trigger": true},
+  {"query": "帮我提交 PR，代码已经写完了", "should_trigger": true},
+  {"query": "评审一下这个 PR 的代码质量", "should_trigger": true},
+  {"query": "检查 PR #123 是否符合需求", "should_trigger": true},
+  {"query": "分析这个 PR 有没有安全问题", "should_trigger": true},
+  {"query": "review PR 456", "should_trigger": true},
+  {"query": "帮我做个 code review", "should_trigger": true},
+  {"query": "把当前分支提交到远程并创建合并请求", "should_trigger": true},
+  {"query": "检查一下代码变更是否满足工作项 12345 的需求", "should_trigger": true},
+  {"query": "评审这个 TFS PR 并把结果发到评论里", "should_trigger": true},
+
+  {"query": "帮我写一个快速排序算法", "should_trigger": false},
+  {"query": "修复这个 bug：数组越界", "should_trigger": false},
+  {"query": "添加用户登录功能", "should_trigger": false},
+  {"query": "重构这个文件", "should_trigger": false},
+  {"query": "git commit 这些更改", "should_trigger": false},
+  {"query": "查看工作项 12345 的详情", "should_trigger": false},
+  {"query": "帮我写单元测试", "should_trigger": false},
+  {"query": "优化数据库查询性能", "should_trigger": false},
+  {"query": "解释这段代码是做什么的", "should_trigger": false},
+  {"query": "git push 到远程", "should_trigger": false}
+]

@@ -1,0 +1,345 @@
+# 字段匹配测试用例库
+# 用于验证字段匹配逻辑的正确性，防止回归
+
+test_cases:
+  # ===== 正确匹配案例（应该匹配）=====
+
+  - id: "correct_001"
+    description: "患者姓名精确匹配"
+    target_field:
+      name: "patient_name"
+      chinese_name: "患者姓名"
+    source_field:
+      name: "XM"
+      chinese_name: "姓名"
+    expected: "match"
+    match_type: "exact_chinese"
+    reason: "中文名完全一致"
+
+  - id: "correct_002"
+    description: "性别代码精确匹配"
+    target_field:
+      name: "gender_code"
+      chinese_name: "性别代码"
+    source_field:
+      name: "XB"
+      chinese_name: "性别"
+    expected: "match"
+    match_type: "exact_chinese"
+    reason: "去掉'代码'后中文名一致"
+
+  - id: "correct_003"
+    description: "出生日期语义匹配"
+    target_field:
+      name: "birthday"
+      chinese_name: "出生日期"
+    source_field:
+      name: "CSRQ"
+      chinese_name: "出生日期"
+    expected: "match"
+    match_type: "exact_chinese"
+    reason: "中文名完全一致"
+
+  - id: "correct_004"
+    description: "医疗保险类别代码字段映射"
+    target_field:
+      name: "insurance_type_code"
+      chinese_name: "医疗保险类别代码"
+    source_field:
+      name: "BXLX"
+      chinese_name: "医疗费用支付方式"
+    expected: "match"
+    match_type: "semantic_mapping"
+    reason: "通过field_mappings.yaml配置映射"
+
+  # ===== 错误匹配案例（不应该匹配）=====
+
+  - id: "incorrect_001"
+    description: "身份证件类别代码不应匹配证件号码"
+    target_field:
+      name: "id_type_code"
+      chinese_name: "身份证件类别代码"
+    source_field:
+      name: "ZJHM"
+      chinese_name: "证件号码"
+    expected: "no_match"
+    reason: "类别代码 vs 证件号码，语义完全不同"
+    rule: "5.1 身份证件类别代码 vs 证件号码"
+
+  - id: "incorrect_002"
+    description: "工作单位电话不应匹配手机号码"
+    target_field:
+      name: "work_place_tel"
+      chinese_name: "工作单位电话号码"
+    source_field:
+      name: "SJHM"
+      chinese_name: "手机号码"
+    expected: "no_match"
+    reason: "工作单位电话 vs 手机号码，前缀不同"
+    rule: "5.2 工作单位电话 vs 手机号码"
+
+  - id: "incorrect_003"
+    description: "联系人电话不应匹配手机号码"
+    target_field:
+      name: "contact_phone"
+      chinese_name: "联系人电话号码"
+    source_field:
+      name: "SJHM"
+      chinese_name: "手机号码"
+    expected: "no_match"
+    reason: "联系人电话 vs 手机号码，前缀不同"
+    rule: "5.3 联系人电话 vs 手机号码"
+
+  - id: "incorrect_004"
+    description: "出生地邮政代码不应匹配出生地"
+    target_field:
+      name: "birth_postcode"
+      chinese_name: "出生地-邮政代码"
+    source_field:
+      name: "CSD"
+      chinese_name: "出生地"
+    expected: "no_match"
+    reason: "邮政代码 vs 出生地区域，属性不同"
+    rule: "5.4 出生地邮政代码 vs 出生地"
+
+  - id: "incorrect_005"
+    description: "居住地行政区划代码不应匹配完整地址"
+    target_field:
+      name: "addr_area_code"
+      chinese_name: "居住地-行政区划代码"
+    source_field:
+      name: "JZDZ"
+      chinese_name: "居住地址"
+    expected: "no_match"
+    reason: "行政区划代码 vs 完整地址，类型不同"
+    rule: "5.5 行政区划代码 vs 完整地址"
+
+  - id: "incorrect_006"
+    description: "联系人姓名不应识别为字典项"
+    target_field:
+      name: "contact_name"
+      chinese_name: "联系人姓名"
+    context_fields:
+      - name: "contact_rel_code"
+        chinese_name: "联系人关系代码"
+    expected: "no_dictionary"
+    reason: "联系人姓名是实际姓名字段，不是字典关联字段"
+    rule: "字典检测排除模式"
+
+  - id: "incorrect_007"
+    description: "居住地地市代码不应匹配到常住地址行政区划代码"
+    target_field:
+      name: "addr_city_code"
+      chinese_name: "居住地-地市代码"
+    source_field:
+      name: "XZQHDM"
+      chinese_name: "常住地址-行政区划代码"
+    expected: "no_match"
+    reason: "地市代码 vs 行政区划代码，粒度不同"
+    rule: "5.5 行政区划代码 vs 完整地址"
+
+  - id: "incorrect_008"
+    description: "联系人电话不应匹配到电话号码"
+    target_field:
+      name: "contact_phone"
+      chinese_name: "联系人电话号码"
+    source_field:
+      name: "DHHM"
+      chinese_name: "电话号码"
+    expected: "no_match"
+    reason: "联系人电话 vs 电话号码，前缀不同"
+    rule: "5.6 电话前缀差异"
+
+  # ===== 边界案例 =====
+
+  - id: "edge_001"
+    description: "职业类别代码匹配"
+    target_field:
+      name: "occup_code"
+      chinese_name: "职业类别代码"
+    source_field:
+      name: "ZYLBDM"
+      chinese_name: "职业类别代码"
+    expected: "match"
+    match_type: "exact_chinese"
+    reason: "中文名完全一致"
+
+  - id: "edge_002"
+    description: "婚姻状况代码匹配"
+    target_field:
+      name: "maritalstatus_code"
+      chinese_name: "婚姻状况代码"
+    source_field:
+      name: "HYZK"
+      chinese_name: "婚姻状况"
+    expected: "match"
+    match_type: "semantic"
+    reason: "去掉'代码'后语义匹配"
+
+  - id: "edge_003"
+    description: "出生地行政区划代码不应匹配常住地址行政区划代码"
+    target_field:
+      name: "birth_area_code"
+      chinese_name: "出生地-行政区划代码"
+    source_field:
+      name: "XZQHDM"
+      chinese_name: "常住地址-行政区划代码"
+    expected: "no_match"
+    reason: "出生地 vs 常住地址，前缀不同"
+    rule: "出生地属性冲突"
+
+  # ===== 2024-07 修复的 keyword 匹配问题 =====
+
+  - id: "keyword_001"
+    description: "关键药品代码不应匹配关键药物用法"
+    target_field:
+      name: "key_drug_code"
+      chinese_name: "关键药品代码"
+      data_type: "S3"
+    source_field:
+      name: "GJYWYF"
+      chinese_name: "关键药物用法"
+      data_type: "S1"
+    expected: "no_match"
+    reason: "代码 vs 用法，类型冲突"
+    rule: "keyword: 代码vs用法"
+
+  - id: "keyword_002"
+    description: "检查报告结果客观所见不应匹配检查结果代码"
+    target_field:
+      name: "exam_desc"
+      chinese_name: "检查报告结果客观所见"
+      data_type: "S1"
+    source_field:
+      name: "JCJGDM"
+      chinese_name: "检查结果代码"
+      data_type: "S3"
+    expected: "no_match"
+    reason: "描述 vs 代码，类型冲突"
+    rule: "keyword: 描述vs代码"
+
+  - id: "keyword_003"
+    description: "报告发布人（检验医师）姓名不应匹配检验医师工号"
+    target_field:
+      name: "rep_doc_sign"
+      chinese_name: "报告发布人（检验医师）姓名"
+    source_field:
+      name: "BGYSGH"
+      chinese_name: "检验医师工号"
+    expected: "no_match"
+    reason: "姓名 vs 工号，类型冲突"
+    rule: "keyword: 姓名vs工号"
+
+  - id: "keyword_004"
+    description: "住院医师签名不应匹配转出医师签名"
+    target_field:
+      name: "hosp_doc_sign"
+      chinese_name: "住院医师签名"
+    source_field:
+      name: "ZCYSQM"
+      chinese_name: "转出医师签名"
+    expected: "no_match"
+    reason: "住院 vs 转出，角色不同"
+    rule: "keyword: 角色不同"
+
+  - id: "keyword_005"
+    description: "报告医师代码不应匹配报告医疗机构代码"
+    target_field:
+      name: "rep_doc_code"
+      chinese_name: "报告医师代码"
+    source_field:
+      name: "BGYLJGDM"
+      chinese_name: "报告医疗机构代码"
+    expected: "no_match"
+    reason: "医师 vs 机构，主体不同"
+    rule: "keyword: 主体不同"
+
+  - id: "keyword_006"
+    description: "会诊医师流水号不应匹配会诊记录流水号"
+    target_field:
+      name: "consult_doc_document_id"
+      chinese_name: "会诊医师流水号"
+    source_field:
+      name: "HZJLLSH"
+      chinese_name: "会诊记录流水号"
+    expected: "no_match"
+    reason: "医师 vs 记录，主体不同"
+    rule: "keyword: 主体不同"
+
+  - id: "keyword_007"
+    description: "会诊医师所属科室代码不应匹配会诊医师工号"
+    target_field:
+      name: "consult_doc_dep_code"
+      chinese_name: "会诊医师所属科室代码"
+    source_field:
+      name: "HZYSGH"
+      chinese_name: "会诊医师工号"
+    expected: "no_match"
+    reason: "科室代码 vs 工号，类型冲突"
+    rule: "keyword: 科室vs工号"
+
+  - id: "keyword_008"
+    description: "严重不良事件与实验药的关系代码不应匹配不良事件报告类型代码"
+    target_field:
+      name: "sae_testmed_code"
+      chinese_name: "严重不良事件与实验药的关系代码"
+    source_field:
+      name: "BGLXDM"
+      chinese_name: "不良事件报告类型代码"
+    expected: "no_match"
+    reason: "关系 vs 类型，概念不同"
+    rule: "keyword: 关系vs类型"
+
+  # ===== 2024-07 修复的 synonym 匹配问题 =====
+
+  - id: "synonym_001"
+    description: "检查结果参考值(定性)不应匹配检查所见"
+    target_field:
+      name: "ref_value_qual"
+      chinese_name: "检查结果参考值(定性)"
+    source_field:
+      name: "JCSJ"
+      chinese_name: "检查所见"
+    expected: "no_match"
+    reason: "参考值 vs 所见，概念不同"
+    rule: "synonym: 参考值vs所见"
+
+  - id: "synonym_002"
+    description: "记录医师姓名不应匹配患者姓名"
+    target_field:
+      name: "record_doc_name"
+      chinese_name: "记录医师姓名"
+    source_field:
+      name: "XM"
+      chinese_name: "患者姓名"
+    expected: "no_match"
+    reason: "医师 vs 患者，身份不同"
+    rule: "synonym: 身份不同"
+
+  - id: "synonym_003"
+    description: "退号操作员姓名不应匹配挂号操作员姓名"
+    target_field:
+      name: "cancel_oper_name"
+      chinese_name: "退号操作员姓名"
+    source_field:
+      name: "GHCZYXM"
+      chinese_name: "挂号操作员姓名"
+    expected: "no_match"
+    reason: "退号 vs 挂号，操作不同"
+    rule: "synonym: 操作不同"
+
+  # ===== 2024-07 修复的 standard_reference 问题 =====
+
+  - id: "std_ref_001"
+    description: "出生地-省市代码不应映射到出生地（通用字段）"
+    target_field:
+      name: "birth_province_code"
+      chinese_name: "出生地-省市代码"
+      data_type: "S3"
+    source_field:
+      name: "CSD"
+      chinese_name: "出生地"
+      data_type: "S1"
+    expected: "no_match"
+    reason: "粒度不匹配：目标有特定粒度，源字段无粒度信息"
+    rule: "field_mapping: 粒度检查"

@@ -1,0 +1,505 @@
+# 云南区域标准 v5.5 — 表关联关系（SQL精度）
+#
+# 数据来源：source_standard.json（从原标准文档解析，字段名均为实际字段名）
+#
+# 每条关联都写清楚：TABLE_A.field = TABLE_B.field
+# 程序可直接根据此文件生成 SQL JOIN 条件
+#
+# ===== JOIN 链总结 =====
+#
+# 门诊链: JBBRJBXXB --KH+KLX--> MZGHB --JZLSH--> MZJZJLB --JZLSH--> MZSFJLB --SFLSH--> MZSFMXB
+#                                                              |                |
+#                                                              +--JZLSH--> MZYZMXB
+#                                                              +--JZLSH--> JCJLB/JYJLB
+#
+# 住院链: JBBRJBXXB --KH+KLX--> ZYJZJLB --JZLSH--> ZYRYDJB/ZYCYDJB
+#                                          |      --JZLSH--> ZYSFJLB --SFLSH--> ZYSFMXB
+#                                          |      --JZLSH--> ZYYZMXB
+#                                          |      --JZLSH--> ZYSSJLBG
+#                                          |      --BAH----> EMR_RYJL
+#                                          |      --JZLSH--> JYJLB/JCJLB/SXJLB
+
+# ===== 角色 → 实际表名 =====
+table_roles:
+  患者信息表: JBBRJBXXB
+  门急诊挂号表: MZGHB
+  门诊就诊记录表: MZJZJLB
+  门急诊非药品医嘱表: MZYZMXB
+  门急诊药品医嘱表: MZYZMXB
+  门急诊收费记录表: MZSFJLB
+  门急诊收费明细表: MZSFMXB
+  住院就诊记录表: ZYJZJLB
+  入院登记信息表: ZYRYDJB
+  出院登记信息表: ZYCYDJB
+  住院非药品医嘱表: ZYYZMXB
+  住院药品医嘱表: ZYYZMXB
+  住院收费记录表: ZYSFJLB
+  住院收费明细表: ZYSFMXB
+  入院记录表: EMR_RYJL
+  转科记录表: EMR_ZKJL
+  急诊留观病历表: EMR_JZLGBL
+  会诊记录表: EMR_HZJL
+  手术记录表: ZYSSJLBG
+  手术记录-麻醉: EMR_MZJL
+  手术记录-麻醉用药: EMR_MZYYJL
+  治疗记录表: ZLJL
+  输血记录表: SXJLB
+  检验记录表: JYJLB
+  检验明细表: JYMXB
+  细菌结果表: XJJGB
+  药敏结果表: YMJGB
+  检查记录表: JCJLB
+  检查报告表: TJBGB
+  住院病案首页表: BA_SYJBK
+  病案首页: BA_SYJBK
+  中医病案首页: BA_SYJBK
+  出院记录表: ZYCYXJBG
+  体检总检表: TJZJB
+  科室信息表: JBKSXXB
+  医护人员信息表: JBYHRYXXB
+  药品信息表: YP_JBXXK
+  收费项目信息表: JB_XMML
+  材料目录表: JB_CLML
+  疾病诊断目录表: JB_ZDML
+  手术目录表: JB_SSML
+  卫生事件摘要: WSSJZY
+  病案首页-诊断: BA_SYZDK
+  病案首页-手术: BA_SYSSK
+  药品入库明细: YP_RKMX
+  药品出库明细: YP_CKMX
+  药品库存信息: YP_KCXXK
+  不良事件-严重: BLSJ_YZBLSJ
+  不良事件-医疗安全: BLSJ_YLAQSJ
+  不良事件-药品: BLSJ_YPBLSJ
+  人员基本信息表: HRP_HUMAN
+  药品出入库表: HRP_DRUG_RECEIVING
+  材料出入库表: HRP_SUPPLIES_RECEIVING
+  药品调价表: YP_TJLSK
+
+# ===== SQL 精度关联关系 =====
+# 格式：
+#   from: 源表名
+#   to: 目标表名
+#   join: TABLE.field = TABLE.field 格式的关联条件（可多行=复合键）
+#   type: 1:1 / 1:N / N:N
+#   note: 说明
+joins:
+
+  # ==================== 门诊链 ====================
+
+  # 患者 → 门诊挂号（通过卡号+卡类型）
+  - from: JBBRJBXXB
+    to: MZGHB
+    join:
+      - JBBRJBXXB.KH = MZGHB.KH            # 卡号
+      - JBBRJBXXB.KLX = MZGHB.KLX          # 卡类型
+    type: "1:N"
+    note: "患者基本信息 → 门诊挂号表"
+
+  # 门诊挂号 → 门诊就诊记录（通过就诊流水号）
+  - from: MZGHB
+    to: MZJZJLB
+    join:
+      - MZGHB.JZLSH = MZJZJLB.JZLSH        # 就诊流水号
+      - MZGHB.YLJGDM = MZJZJLB.YLJGDM      # 医疗机构代码
+    type: "1:1"
+    note: "门诊挂号表 → 门诊就诊记录表（门诊主表）"
+
+  # 门诊就诊记录 → 门诊收费记录（通过就诊流水号）
+  - from: MZJZJLB
+    to: MZSFJLB
+    join:
+      - MZJZJLB.JZLSH = MZSFJLB.JZLSH      # 就诊流水号
+      - MZJZJLB.YLJGDM = MZSFJLB.YLJGDM    # 医疗机构代码
+    type: "1:N"
+    note: "门诊就诊记录表 → 门诊收费记录表"
+
+  # 门诊收费记录 → 门诊收费明细（通过收费流水号）
+  - from: MZSFJLB
+    to: MZSFMXB
+    join:
+      - MZSFJLB.SFLSH = MZSFMXB.SFLSH      # 收费流水号
+      - MZSFJLB.YLJGDM = MZSFMXB.YLJGDM    # 医疗机构代码
+    type: "1:N"
+    note: "门诊收费记录表 → 门诊收费明细表"
+
+  # 门诊就诊记录 → 门诊医嘱明细（通过就诊流水号）
+  - from: MZJZJLB
+    to: MZYZMXB
+    join:
+      - MZJZJLB.JZLSH = MZYZMXB.JZLSH      # 就诊流水号
+      - MZJZJLB.YLJGDM = MZYZMXB.YLJGDM    # 医疗机构代码
+    type: "1:N"
+    note: "门诊就诊记录表 → 门诊医嘱明细表"
+
+  # ==================== 住院链 ====================
+
+  # 患者 → 住院就诊记录（通过卡号+卡类型）
+  - from: JBBRJBXXB
+    to: ZYJZJLB
+    join:
+      - JBBRJBXXB.KH = ZYJZJLB.KH          # 卡号
+      - JBBRJBXXB.KLX = ZYJZJLB.KLX        # 卡类型
+    type: "1:N"
+    note: "患者基本信息 → 住院就诊记录表"
+
+  # 住院就诊记录 → 入院登记（通过就诊流水号）
+  - from: ZYJZJLB
+    to: ZYRYDJB
+    join:
+      - ZYJZJLB.JZLSH = ZYRYDJB.JZLSH      # 就诊流水号
+      - ZYJZJLB.YLJGDM = ZYRYDJB.YLJGDM    # 医疗机构代码
+    type: "1:1"
+    note: "住院就诊记录表 → 入院登记信息"
+
+  # 住院就诊记录 → 出院登记（通过就诊流水号）
+  - from: ZYJZJLB
+    to: ZYCYDJB
+    join:
+      - ZYJZJLB.JZLSH = ZYCYDJB.JZLSH      # 就诊流水号
+      - ZYJZJLB.YLJGDM = ZYCYDJB.YLJGDM    # 医疗机构代码
+    type: "1:1"
+    note: "住院就诊记录表 → 出院登记信息"
+
+  # 住院就诊记录 → 住院收费记录（通过就诊流水号）
+  - from: ZYJZJLB
+    to: ZYSFJLB
+    join:
+      - ZYJZJLB.JZLSH = ZYSFJLB.JZLSH      # 就诊流水号
+      - ZYJZJLB.YLJGDM = ZYSFJLB.YLJGDM    # 医疗机构代码
+    type: "1:N"
+    note: "住院就诊记录表 → 出院患者收费记录表"
+
+  # 住院收费记录 → 住院收费明细（通过收费流水号）
+  - from: ZYSFJLB
+    to: ZYSFMXB
+    join:
+      - ZYSFJLB.SFLSH = ZYSFMXB.SFLSH      # 收费流水号
+      - ZYSFJLB.YLJGDM = ZYSFMXB.YLJGDM    # 医疗机构代码
+    type: "1:N"
+    note: "出院患者收费记录表 → 出院患者收费明细表"
+
+  # 住院就诊记录 → 住院医嘱明细（通过就诊流水号）
+  - from: ZYJZJLB
+    to: ZYYZMXB
+    join:
+      - ZYJZJLB.JZLSH = ZYYZMXB.JZLSH      # 就诊流水号
+      - ZYJZJLB.YLJGDM = ZYYZMXB.YLJGDM    # 医疗机构代码
+    type: "1:N"
+    note: "住院就诊记录表 → 住院医嘱明细表"
+
+  # 住院就诊记录 → 病案首页（通过病案号）
+  - from: ZYJZJLB
+    to: BA_SYJBK
+    join:
+      - ZYJZJLB.JZLSH = BA_SYJBK.JZLSH      # 住院就诊流水号
+      - ZYJZJLB.YLJGDM = BA_SYJBK.YLJGDM    # 医疗机构代码
+    type: "1:1"
+    note: "住院就诊记录表 → 病案首页"
+
+  # 住院就诊记录 → 入院记录（通过病案号+住院号）
+  - from: ZYJZJLB
+    to: EMR_RYJL
+    join:
+      - ZYJZJLB.JZLSH = EMR_RYJL.JZLSH      # 住院就诊流水号
+      - ZYJZJLB.YLJGDM = EMR_RYJL.YLJGDM    # 医疗机构代码
+    type: "1:1"
+    note: "住院就诊记录表 → 入院记录"
+
+  # 住院就诊记录 → 手术记录（通过就诊流水号）
+  - from: ZYJZJLB
+    to: ZYSSJLBG
+    join:
+      - ZYJZJLB.JZLSH = ZYSSJLBG.JZLSH      # 就诊流水号
+      - ZYJZJLB.YLJGDM = ZYSSJLBG.YLJGDM    # 医疗机构代码
+    type: "1:N"
+    note: "住院就诊记录表 → 手术记录"
+
+  # ==================== 检验检查链 ====================
+
+  # 门诊就诊记录 → 检验记录（通过就诊流水号）
+  - from: MZJZJLB
+    to: JYJLB
+    join:
+      - MZJZJLB.JZLSH = JYJLB.JZLSH         # 就诊流水号
+      - MZJZJLB.YLJGDM = JYJLB.YLJGDM       # 医疗机构代码
+    type: "1:N"
+    note: "门诊就诊 → 检验记录"
+
+  # 住院就诊记录 → 检验记录（通过就诊流水号）
+  - from: ZYJZJLB
+    to: JYJLB
+    join:
+      - ZYJZJLB.JZLSH = JYJLB.JZLSH         # 就诊流水号
+      - ZYJZJLB.YLJGDM = JYJLB.YLJGDM       # 医疗机构代码
+    type: "1:N"
+    note: "住院就诊 → 检验记录"
+
+  # 检验记录 → 检验明细（通过就诊流水号+检验流水号）
+  - from: JYJLB
+    to: JYMXB
+    join:
+      - JYJLB.JYJLLSH = JYMXB.JYJLLSH       # 检验流水号
+      - JYJLB.YLJGDM = JYMXB.YLJGDM         # 医疗机构代码
+    type: "1:N"
+    note: "检验记录表 → 检验明细表"
+
+  # 检验记录 → 细菌结果（通过就诊流水号）
+  - from: JYJLB
+    to: XJJGB
+    join:
+      - JYJLB.JYJLLSH = XJJGB.JYJLLSH       # 检验流水号
+      - JYJLB.YLJGDM = XJJGB.YLJGDM         # 医疗机构代码
+    type: "1:N"
+    note: "检验记录表 → 细菌结果表"
+
+  # 细菌结果 → 药敏结果（通过细菌代号）
+  - from: XJJGB
+    to: YMJGB
+    join:
+      - XJJGB.XJDH = YMJGB.XJDH             # 细菌代号
+      - XJJGB.YLJGDM = YMJGB.YLJGDM         # 医疗机构代码
+    type: "1:N"
+    note: "细菌结果表 → 药敏结果表"
+
+  # 门诊就诊记录 → 检查记录（通过就诊流水号）
+  - from: MZJZJLB
+    to: JCJLB
+    join:
+      - MZJZJLB.JZLSH = JCJLB.JZLSH         # 就诊流水号
+      - MZJZJLB.YLJGDM = JCJLB.YLJGDM       # 医疗机构代码
+    type: "1:N"
+    note: "门诊就诊 → 检查记录"
+
+  # 住院就诊记录 → 检查记录（通过就诊流水号）
+  - from: ZYJZJLB
+    to: JCJLB
+    join:
+      - ZYJZJLB.JZLSH = JCJLB.JZLSH         # 就诊流水号
+      - ZYJZJLB.YLJGDM = JCJLB.YLJGDM       # 医疗机构代码
+    type: "1:N"
+    note: "住院就诊 → 检查记录"
+
+  # 门诊/住院 → 输血记录（通过就诊流水号）
+  - from: ZYJZJLB
+    to: SXJLB
+    join:
+      - ZYJZJLB.JZLSH = SXJLB.JZLSH         # 就诊流水号
+      - ZYJZJLB.YLJGDM = SXJLB.YLJGDM       # 医疗机构代码
+    type: "1:N"
+    note: "住院就诊 → 输血记录"
+
+  # ==================== 病历文书链 ====================
+
+  # 住院就诊 → 转科记录（通过就诊流水号）
+  - from: ZYJZJLB
+    to: EMR_ZKJL
+    join:
+      - ZYJZJLB.JZLSH = EMR_ZKJL.JZLSH      # 就诊流水号
+      - ZYJZJLB.YLJGDM = EMR_ZKJL.YLJGDM    # 医疗机构代码
+    type: "1:N"
+    note: "住院就诊 → 转科记录"
+
+  # 住院就诊 → 会诊记录（通过就诊流水号）
+  - from: ZYJZJLB
+    to: EMR_HZJL
+    join:
+      - ZYJZJLB.JZLSH = EMR_HZJL.JZLSH      # 就诊流水号
+      - ZYJZJLB.YLJGDM = EMR_HZJL.YLJGDM    # 医疗机构代码
+    type: "1:N"
+    note: "住院就诊 → 会诊记录"
+
+  # 住院就诊 → 治疗记录（通过就诊流水号）
+  - from: ZYJZJLB
+    to: ZLJL
+    join:
+      - ZYJZJLB.JZLSH = ZLJL.JZLSH          # 就诊流水号
+      - ZYJZJLB.YLJGDM = ZLJL.YLJGDM        # 医疗机构代码
+    type: "1:N"
+    note: "住院就诊 → 治疗记录"
+
+  # ==================== 字典关联 ====================
+  # 字典表通过主键被业务表引用
+  # 每个字典表列出：主键、实际被哪些业务表引用、JOIN 条件
+
+  # ----- YP_JBXXK 药品基本信息 -----
+  # 主键: YPDM(医院药品代码) + YLJGDM
+  # 业务表通过 YPDMNBBM(药物代码) 关联到字典表主键 YPDM
+
+  - from: MZYZMXB
+    to: YP_JBXXK
+    join:
+      - MZYZMXB.YPDMNBBM = YP_JBXXK.YPDM      # 药物代码 → 医院药品代码（字典表主键）
+      - MZYZMXB.YLJGDM = YP_JBXXK.YLJGDM      # 医疗机构代码
+    type: "N:1"
+    note: "门诊药品医嘱 → 药品基本信息（通过药物代码关联主键）"
+
+  # 药品出入库/调价/库存 → 药品基本信息（通过主键 YPDM 直接关联）
+  - from: YP_RKMX
+    to: YP_JBXXK
+    join:
+      - YP_RKMX.YPDM = YP_JBXXK.YPDM          # 医院药品代码（字典表主键）
+      - YP_RKMX.YLJGDM = YP_JBXXK.YLJGDM      # 医疗机构代码
+    type: "N:1"
+    note: "药品入库明细 → 药品基本信息（通过主键YPDM关联）"
+
+  - from: YP_CKMX
+    to: YP_JBXXK
+    join:
+      - YP_CKMX.YPDM = YP_JBXXK.YPDM          # 医院药品代码
+      - YP_CKMX.YLJGDM = YP_JBXXK.YLJGDM      # 医疗机构代码
+    type: "N:1"
+    note: "药品出库明细 → 药品基本信息"
+
+  - from: YP_TJLSK
+    to: YP_JBXXK
+    join:
+      - YP_TJLSK.YPDM = YP_JBXXK.YPDM         # 医院药品代码
+      - YP_TJLSK.YLJGDM = YP_JBXXK.YLJGDM     # 医疗机构代码
+    type: "N:1"
+    note: "药品调价历史 → 药品基本信息"
+
+  - from: YP_KCXXK
+    to: YP_JBXXK
+    join:
+      - YP_KCXXK.YPDM = YP_JBXXK.YPDM         # 医院药品代码
+      - YP_KCXXK.YLJGDM = YP_JBXXK.YLJGDM     # 医疗机构代码
+    type: "N:1"
+    note: "药品库存信息 → 药品基本信息"
+
+  # ----- JB_XMML 收费项目目录 -----
+  # 主键: XMDM(项目代码) + YLJGDM
+  # 门诊医嘱通过 FUXMYYDM(项目代码) 关联
+  # 住院医嘱通过 YZMXBM(院内医嘱项目编码) 关联
+  # 收费明细通过 MXXMBM(院内明细项目编码) 关联
+
+  - from: MZYZMXB
+    to: JB_XMML
+    join:
+      - MZYZMXB.FUXMYYDM = JB_XMML.XMDM       # 项目代码 → 项目代码（字典表主键）
+      - MZYZMXB.YLJGDM = JB_XMML.YLJGDM       # 医疗机构代码
+    type: "N:1"
+    note: "门诊医嘱 → 收费项目目录（通过FUXMYYDM项目代码关联）"
+
+  - from: ZYYZMXB
+    to: JB_XMML
+    join:
+      - ZYYZMXB.YZMXBM = JB_XMML.XMDM         # 院内医嘱项目编码 → 项目代码
+      - ZYYZMXB.YLJGDM = JB_XMML.YLJGDM       # 医疗机构代码
+    type: "N:1"
+    note: "住院医嘱 → 收费项目目录（通过YZMXBM院内医嘱项目编码关联）"
+
+  - from: MZSFMXB
+    to: JB_XMML
+    join:
+      - MZSFMXB.MXXMBM = JB_XMML.XMDM         # 院内明细项目编码 → 项目代码
+      - MZSFMXB.YLJGDM = JB_XMML.YLJGDM       # 医疗机构代码
+    type: "N:1"
+    note: "门诊收费明细 → 收费项目目录（通过院内明细项目编码关联）"
+
+  - from: ZYSFMXB
+    to: JB_XMML
+    join:
+      - ZYSFMXB.MXXMBM = JB_XMML.XMDM         # 院内明细项目编码 → 项目代码
+      - ZYSFMXB.YLJGDM = JB_XMML.YLJGDM       # 医疗机构代码
+    type: "N:1"
+    note: "住院收费明细 → 收费项目目录"
+
+  # ----- JB_CLML 材料目录 -----
+  # 主键: CLDM(材料代码) + YLJGDM
+  # 门诊医嘱通过 FUXMYYDM(项目代码) 关联（项目代码也用于材料）
+  # 住院医嘱通过 YZMXBM(院内医嘱项目编码) 关联（项目编码也用于材料）
+
+  - from: MZYZMXB
+    to: JB_CLML
+    join:
+      - MZYZMXB.FUXMYYDM = JB_CLML.CLDM       # 项目代码 → 材料代码（字典表主键）
+      - MZYZMXB.YLJGDM = JB_CLML.YLJGDM       # 医疗机构代码
+    type: "N:1"
+    note: "门诊医嘱 → 材料目录（FUXMYYDM项目代码同时关联项目和材料）"
+
+  - from: ZYYZMXB
+    to: JB_CLML
+    join:
+      - ZYYZMXB.YZMXBM = JB_CLML.CLDM         # 院内医嘱项目编码 → 材料代码
+      - ZYYZMXB.YLJGDM = JB_CLML.YLJGDM       # 医疗机构代码
+    type: "N:1"
+    note: "住院医嘱 → 材料目录（YZMXBM同时关联药品/项目/材料）"
+
+  # ----- 住院医嘱 → 药品基本信息 -----
+  # 住院医嘱通过 YZMXBM(院内医嘱项目编码) 关联药品字典
+  # 注：住院医嘱无 YPDMNBBM(药物代码)，通过 YZMXBM 统一关联
+
+  - from: ZYYZMXB
+    to: YP_JBXXK
+    join:
+      - ZYYZMXB.YZMXBM = YP_JBXXK.YPDM        # 院内医嘱项目编码 → 医院药品代码（字典表主键）
+      - ZYYZMXB.YLJGDM = YP_JBXXK.YLJGDM      # 医疗机构代码
+    type: "N:1"
+    note: "住院医嘱 → 药品基本信息（通过YZMXBM院内医嘱项目编码关联）"
+
+  # ----- JBKSXXB 科室信息 -----
+  # 主键: KSDM(科室代码) + YLJGDM
+
+  - from: ZYCYXJBG
+    to: JBKSXXB
+    join:
+      - ZYCYXJBG.YNKSDM  = JBKSXXB.KSDM       # 院内科室编码
+      - ZYCYXJBG.YLJGDM = JBKSXXB.YLJGDM      # 医疗机构代码
+    type: "N:1"
+    note: "出院小结 → 科室信息"
+
+  # ----- JBBQXXB 病区信息 -----
+  # 主键: BQDM(病区代码) + YLJGDM
+  # 注意：当前源标准中无业务表通过 BQDM 关联此字典表
+
+  # ----- JB_ZDML 疾病诊断目录 -----
+  # 主键: YNZDDM(院内诊断代码) + YLJGDM
+
+  - from: BA_SYZDK
+    to: JB_ZDML
+    join:
+      - BA_SYZDK.YNZDDM = JB_ZDML.YNZDDM      # 院内诊断代码（字典表主键）
+      - BA_SYZDK.YLJGDM = JB_ZDML.YLJGDM      # 医疗机构代码
+    type: "N:1"
+    note: "病案首页出院诊断 → 疾病诊断目录"
+
+  # ----- JB_SSML 手术目录 -----
+  # 主键: YNSSDM(院内手术代码) + YLJGDM
+
+  - from: BA_SYSSK
+    to: JB_SSML
+    join:
+      - BA_SYSSK.YNSSDM = JB_SSML.YNSSDM      # 院内手术代码（字典表主键）
+      - BA_SYSSK.YLJGDM = JB_SSML.YLJGDM      # 医疗机构代码
+    type: "N:1"
+    note: "病案首页手术 → 手术目录"
+
+  # ==================== 病案首页关联链 ====================
+
+  # 病案首页 → 患者基本信息（通过卡号+卡类型）
+  - from: BA_SYJBK
+    to: JBBRJBXXB
+    join:
+      - BA_SYJBK.KH = JBBRJBXXB.KH            # 卡号
+      - BA_SYJBK.KLX = JBBRJBXXB.KLX          # 卡类型
+    type: "N:1"
+    note: "病案首页 → 患者基本信息（通过卡号+卡类型关联，可获取患者基本信息中的字段）"
+
+  # 病案首页 → 病案首页诊断子表（主子表关系）
+  - from: BA_SYJBK
+    to: BA_SYZDK
+    join:
+      - BA_SYJBK.BAH = BA_SYZDK.BAH            # 病案号
+      - BA_SYJBK.YLJGDM = BA_SYZDK.YLJGDM     # 医疗机构代码
+    type: "1:N"
+    note: "病案首页 → 病案首页诊断子表（主子表关系，一行一个诊断）"
+
+  # 病案首页 → 病案首页手术子表（主子表关系）
+  - from: BA_SYJBK
+    to: BA_SYSSK
+    join:
+      - BA_SYJBK.BAH = BA_SYSSK.BAH            # 病案号
+      - BA_SYJBK.YLJGDM = BA_SYSSK.YLJGDM     # 医疗机构代码
+    type: "1:N"
+    note: "病案首页 → 病案首页手术子表（主子表关系，一行一个手术）"

@@ -1,0 +1,176 @@
+# 数据模型比对报告模板
+
+# =============================================================================
+# 报告结构定义
+# =============================================================================
+report_structure:
+  - section: "比对概览"
+    template: |
+      ## 一、比对概览
+
+      - **原标准**：{source_name} ({source_version})
+      - **目标标准**：{target_name} ({target_version})
+      - **比对时间**：{compare_time}
+      - **知识库**：{knowledge_base_path}
+      - **总表数**：{total_tables}
+      - **总字段数**：{total_fields}
+
+      ### 统计摘要
+      | 判定类型 | 数量 | 占比 |
+      |---------|------|------|
+      | ✓ 满足 | {satisfied_count} | {satisfied_percent}% |
+      | ⚠ 需修改 | {modify_count} | {modify_percent}% |
+      | ✗ 需新增 | {new_count} | {new_percent}% |
+
+  - section: "修订汇总"
+    template: |
+      ## 二、修订汇总
+
+      ### 2.1 需新增的表
+      {new_tables_section}
+
+      ### 2.2 需新增的字段
+      {new_fields_section}
+
+      ### 2.3 需修改的字段
+      {modified_fields_section}
+
+      ### 2.4 值域修订
+      {value_domain_section}
+
+  - section: "逐表比对详情"
+    template: |
+      ## 三、逐表比对详情
+
+      {for each target_table}
+      ### 表{index}：{table_name} ({table_comment})
+
+      **字段比对：**
+
+      {comparison_table}
+
+      {endfor}
+
+  - section: "跨表关联清单"
+    template: |
+      ## 四、跨表关联清单
+
+      以下字段需要通过跨表关联获取：
+
+      {cross_table_relations_table}
+
+  - section: "值域修订详情"
+    template: |
+      ## 五、值域修订详情
+
+      {for each field_with_domain_revision}
+      ### 字段：{field_name} ({field_comment})
+
+      **值域比对：**
+
+      {value_domain_comparison_table}
+
+      **修订建议：**
+      {revision_suggestions}
+
+      ---
+
+      {endfor}
+
+# =============================================================================
+# 表格模板
+# =============================================================================
+table_templates:
+  # 新增表表格
+  new_tables_table:
+    headers: ["序号", "表名", "表注释", "字段数", "建议原因"]
+    columns: ["index", "table_name", "table_comment", "field_count", "reason"]
+    color: "new"
+
+  # 新增字段表格（按表分类）
+  new_fields_by_table:
+    template: |
+      #### 表：{table_name} ({table_comment})
+
+      | 字段名 | 字段注释 | 类型 | 长度 | 约束 | 来源 |
+      |--------|---------|------|------|------|------|
+      {for each new_field}
+      | {field_name} | {field_comment} | {field_type} | {field_length} | {constraint} | 新增 |
+      {endfor}
+
+  # 修改字段表格（按表分类）
+  modified_fields_by_table:
+    template: |
+      #### 表：{table_name} ({table_comment})
+
+      | 字段名 | 字段注释 | 修改项 | 当前值 | 修改后值 | 原因 |
+      |--------|---------|--------|--------|---------|------|
+      {for each modified_field}
+      | {field_name} | {field_comment} | {modify_item} | {current_value} | {new_value} | {reason} |
+      {endfor}
+
+  # 逐表比对详情表格
+  comparison_table:
+    headers: [
+      "目标字段", "目标注释", "目标类型", "目标约束", "目标长度",
+      "原标准字段", "原标准注释", "原标准类型", "原标准约束", "原标准长度",
+      "匹配方式", "判定", "备注"
+    ]
+    columns: [
+      "target_field", "target_comment", "target_type", "target_constraint", "target_length",
+      "source_field", "source_comment", "source_type", "source_constraint", "source_length",
+      "match_type", "verdict", "note"
+    ]
+
+    # 判定图标
+    verdict_icons:
+      satisfied: "✓ 满足"
+      modify: "⚠ 修改"
+      new: "✗ 新增"
+
+  # 跨表关联表格
+  cross_table_relations_table:
+    headers: ["目标字段", "目标注释", "关联路径", "关联键", "取数逻辑", "SQL模板"]
+    columns: ["target_field", "target_comment", "path", "join_keys", "logic", "sql_template"]
+
+  # 值域比对表格
+  value_domain_comparison_table:
+    headers: ["目标值域编码", "目标值域名称", "原标准值域编码", "原标准值域名称", "匹配方式", "处理动作"]
+    columns: ["target_code", "target_name", "source_code", "source_name", "match_type", "action"]
+
+    # 处理动作图标
+    action_icons:
+      satisfied: "✓ 满足"
+      mapping: "→ 映射"
+      addition: "⚠ 需新增"
+      uncertain: "? 待确认"
+
+# =============================================================================
+# 匹配方式说明
+# =============================================================================
+match_type_descriptions:
+  exact_chinese: "中文名精确匹配"
+  exact_english: "英文名精确匹配"
+  semantic_chinese: "中文语义匹配（词库）"
+  semantic_similarity: "中文语义匹配（相似度）"
+  cross_table: "跨表关联"
+  multi_hop: "多跳关联"
+  derived: "业务逻辑推导"
+  public_flag: "公共标识"
+  address_coverage: "地址覆盖"
+
+# =============================================================================
+# 颜色方案
+# =============================================================================
+color_scheme:
+  # 满足
+  satisfied_bg: "#c8e6c9"
+  satisfied_text: "#2e7d32"
+
+  # 修改
+  modify_bg: "#ffe0b2"
+  modify_text: "#e65100"
+
+  # 新增
+  new_bg: "#ffcdd2"
+  new_text: "#c62828"

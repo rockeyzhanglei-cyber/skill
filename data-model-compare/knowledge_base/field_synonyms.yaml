@@ -1,0 +1,340 @@
+# 字段同义词库（统一版）
+# 合并了原 synonyms.yaml 和 industry/industry_base_synonyms.yaml
+# 格式：关键词 -> { synonyms: [...], standard_codes: [...](可选), description: "..."(可选) }
+#
+# 代码加载时只读取 synonyms 字段，standard_codes 和 description 供人工维护参考
+
+field_synonyms:
+
+  # ===== 患者标识 =====
+  个人基本信息标识号:
+    synonyms: [local_id, YYDAH, 患者ID, 病案号, 档案号]
+  患者:
+    synonyms: [病人, 病患, 人员]
+  病人:
+    synonyms: [患者, 病患]
+  档案号:
+    synonyms: [病案号, 住院号, 门诊号, 就诊号, YYDAH, local_id, patient_id, 患者ID]
+    standard_codes: [YYDAH]
+    description: "患者在医疗机构的唯一标识"
+  病案号:
+    synonyms: [档案号, 住院号, YYDAH]
+  住院号:
+    synonyms: [档案号, 病案号, 入院号]
+  门诊号:
+    synonyms: [档案号, 就诊号]
+
+  # ===== 姓名 =====
+  姓名:
+    synonyms: [名字, 名称, 患者姓名, 病人姓名, patient_name, name]
+    standard_codes: [XM]
+    description: "患者姓名"
+  患者姓名:
+    synonyms: [姓名, 名字, patient_name]
+
+  # ===== 证件类型 =====
+  身份证件类别代码:
+    synonyms: [id_type_code, 证件类型, 证件类型代码]
+  证件类型:
+    synonyms: [身份证件类别代码, id_type_code, 证件类别, 身份证件类别, 身份证件类型]
+
+  # ===== 性别 =====
+  性别:
+    synonyms: [性别代码, 性别名称, 男女, gender, sex]
+    standard_codes: [XB]
+    description: "患者性别"
+  性别代码:
+    synonyms: [性别]
+
+  # ===== 身份证/证件 =====
+  身份证:
+    synonyms: [身份证号, 身份证号码, 证件号码, 证件号]
+  身份证号:
+    synonyms: [身份证, 证件号码, id_card, identity_number]
+    standard_codes: [SFZH]
+    description: "患者身份证号码"
+  证件号码:
+    synonyms: [身份证, 身份证号]
+
+  # ===== 出生日期 =====
+  出生日期:
+    synonyms: [生日, 出生年月日, 出生年月, 出生时间, birth_date]
+    standard_codes: [CSNY]
+    description: "患者出生日期"
+  出生年月:
+    synonyms: [出生日期, 生日]
+
+  # ===== 联系方式 =====
+  联系电话:
+    synonyms: [电话, 手机号, 联系方式, 移动电话, 固定电话, phone, telephone]
+    standard_codes: [LXDH]
+    description: "患者联系电话"
+  电话:
+    synonyms: [联系电话, 手机号]
+  手机号:
+    synonyms: [联系电话, 电话]
+  # ===== 电子邮件（不与地址匹配） =====
+  电子邮件:
+    synonyms: [email, 电子邮箱, 邮件地址]
+    description: "电子邮件地址，不与居住地址等地址字段匹配"
+
+  # ===== 地址 =====
+  地址:
+    synonyms: [住址, 现住址, 居住地址, 联系地址, 户口地址, 户籍地地址, address]
+    exclude: [电子邮件地址, 电子邮件, email]
+    standard_codes: [JZDZ]
+    description: "患者居住地址"
+  住址:
+    synonyms: [地址, 现住址]
+  详细地址:
+    synonyms: [地址详情]
+  户口地址:
+    synonyms: [户籍地地址, 户籍地址]
+  户籍地地址:
+    synonyms: [户口地址, 户籍地址]
+  邮编:
+    synonyms: [邮政编码, 地址邮编, 户口地址邮编, 户籍地邮编]
+  邮政编码:
+    synonyms: [邮编, 地址邮编]
+  户口地址邮编:
+    synonyms: [户籍地邮编, 邮编]
+  户籍地邮编:
+    synonyms: [户口地址邮编, 邮编]
+
+  # ===== 机构相关 =====
+  机构:
+    synonyms: [医院, 单位, 医疗机构]
+  医院:
+    synonyms: [机构, 医疗机构, 医疗单位]
+  医疗机构:
+    synonyms: [医院, 机构]
+  医疗机构代码:
+    synonyms: [机构代码, 医院代码, org_code]
+    standard_codes: [JGDM]
+    description: "医疗机构的唯一标识"
+  机构代码:
+    synonyms: [医疗机构代码, 医院代码]
+  医疗机构名称:
+    synonyms: [机构名称, 医院名称]
+  院区:
+    synonyms: [分院, 院区代码]
+  分院:
+    synonyms: [院区, 分院代码]
+
+  # ===== 科室相关 =====
+  科室:
+    synonyms: [部门, 临床科室, 业务科室]
+  科室代码:
+    synonyms: [部门代码, 科室编码, dept_code]
+    standard_codes: [KSDM]
+    description: "科室的唯一标识"
+  科室名称:
+    synonyms: [部门名称]
+  病区:
+    synonyms: [病房, 护理单元, 病区代码]
+  病房:
+    synonyms: [病区, 护理单元]
+  床位:
+    synonyms: [床号, 床位号, 床位代码]
+
+  # ===== 医护人员 =====
+  医生:
+    synonyms: [医师, 大夫, 经治医生, 主治医生]
+  医师:
+    synonyms: [医生, 大夫]
+  医生代码:
+    synonyms: [医师代码, 医生编码, 工号, doctor_code]
+    standard_codes: [YSJB]
+    description: "医生的唯一标识"
+  医生姓名:
+    synonyms: [医师姓名, 大夫姓名]
+  护士:
+    synonyms: [护理人员, 责任护士]
+  护士代码:
+    synonyms: [护士编码, 护理人员代码]
+
+  # ===== 就诊信息 =====
+  就诊:
+    synonyms: [看病, 诊疗, 诊治]
+  就诊流水号:
+    synonyms: [就诊ID, 流水号, 就诊编号, 就诊序号, visit_id]
+    standard_codes: [JZLSH]
+    description: "就诊记录的唯一标识"
+  就诊日期:
+    synonyms: [就诊时间, 就诊日期时间, 看诊时间, visit_date]
+    standard_codes: [JZRQ]
+    description: "就诊日期"
+  就诊类型:
+    synonyms: [就诊类别, 就诊方式, 门诊类型, visit_type]
+    standard_codes: [JZLX]
+    description: "就诊类型（门诊/住院/急诊）"
+  挂号:
+    synonyms: [挂号信息, 挂号记录, 预约]
+  挂号费:
+    synonyms: [挂号费用, 诊查费]
+
+  # ===== 诊断相关 =====
+  诊断:
+    synonyms: [疾病, 病症, 诊断信息]
+  诊断代码:
+    synonyms: [疾病代码, 诊断编码, ICD编码, diagnosis_code]
+    standard_codes: [ZDDM]
+    description: "诊断的代码"
+  诊断名称:
+    synonyms: [疾病名称, 诊断描述, diagnosis_name]
+    standard_codes: [ZDMC]
+    description: "诊断的名称"
+  主诊断:
+    synonyms: [主要诊断, 第一诊断]
+  次诊断:
+    synonyms: [次要诊断, 其他诊断, 伴随诊断]
+  入院诊断:
+    synonyms: [入院时诊断]
+  出院诊断:
+    synonyms: [出院时诊断, 最终诊断]
+
+  # ===== 医嘱相关 =====
+  医嘱:
+    synonyms: [处方, 医嘱信息, 医嘱内容]
+  长期医嘱:
+    synonyms: [常规医嘱]
+  临时医嘱:
+    synonyms: [即刻医嘱, 急医嘱]
+  医嘱开始时间:
+    synonyms: [开始时间, 下达时间]
+  医嘱停止时间:
+    synonyms: [结束时间, 停止时间]
+
+  # ===== 收费相关 =====
+  收费:
+    synonyms: [计费, 费用, 结算]
+  收费金额:
+    synonyms: [费用金额, 金额, 总金额]
+  收费标准:
+    synonyms: [单价, 价格, 项目单价]
+  自费:
+    synonyms: [自付, 个人支付, 个人自费]
+  医保:
+    synonyms: [医疗保险, 医保支付, 统筹支付]
+  个人账户:
+    synonyms: [医保个人账户, 账户支付]
+
+  # ===== 药品相关 =====
+  药品:
+    synonyms: [药物, 用药]
+  药品代码:
+    synonyms: [药物代码, 药品编码, medicine_code, drug_code]
+    standard_codes: [YPDM]
+    description: "药品的唯一标识"
+  药品名称:
+    synonyms: [药物名称, 通用名, 商品名, medicine_name, drug_name]
+    standard_codes: [YPMC]
+    description: "药品的名称"
+  药品规格:
+    synonyms: [规格, 剂型规格]
+  药品剂型:
+    synonyms: [剂型, 制剂类型]
+  用药途径:
+    synonyms: [给药途径, 给药方式, 用法]
+  用药频次:
+    synonyms: [给药频次, 频次, 用法用量]
+
+  # ===== 检验检查 =====
+  检验:
+    synonyms: [化验, 实验室检查, 检验检查]
+  检验项目:
+    synonyms: [化验项目, 检验内容]
+  检验项目代码:
+    synonyms: [化验项目代码, test_item_code]
+    standard_codes: [JYXMDM]
+    description: "检验项目的代码"
+  检验结果:
+    synonyms: [化验结果, 检验结论, test_result]
+    standard_codes: [JYJG]
+    description: "检验的结果"
+  检查:
+    synonyms: [影像学检查, 辅助检查]
+  检查项目:
+    synonyms: [检查内容]
+  检查结果:
+    synonyms: [检查结论, 检查所见]
+  检查报告:
+    synonyms: [检查报告单]
+
+  # ===== 手术相关 =====
+  手术:
+    synonyms: [术式, 手术操作]
+  手术代码:
+    synonyms: [手术编码, 手术名称代码]
+  手术名称:
+    synonyms: [手术操作名称, 术式名称]
+  手术日期:
+    synonyms: [手术时间, 手术开始时间]
+  手术级别:
+    synonyms: [手术等级]
+  主刀医生:
+    synonyms: [手术者, 术者]
+  麻醉:
+    synonyms: [麻醉方式, 麻醉方法]
+  麻醉医生:
+    synonyms: [麻醉师]
+
+  # ===== 费用分类 =====
+  药品费:
+    synonyms: [西药费, 中药费, 中草药费]
+  检查费:
+    synonyms: [影像检查费, 检验费]
+  治疗费:
+    synonyms: [处置费, 操作费]
+  手术费:
+    synonyms: [手术操作费]
+  护理费:
+    synonyms: [护理费用, 住院护理费]
+  床位费:
+    synonyms: [住院床位费]
+  材料费:
+    synonyms: [耗材费, 医用材料费]
+
+  # ===== 代码/编码通用 =====
+  代码:
+    synonyms: [编码, 代号, 代码值]
+  编码:
+    synonyms: [代码, 编码值]
+  代号:
+    synonyms: [代码, 编码]
+
+  # ===== 名称通用 =====
+  名称:
+    synonyms: [名字, 名称值]
+  名字:
+    synonyms: [名称]
+
+  # ===== 标志/标识 =====
+  标志:
+    synonyms: [标识, 标记, 标志位]
+  标识:
+    synonyms: [标志, 标记]
+
+  # ===== 时间相关 =====
+  时间:
+    synonyms: [日期, 日期时间, 时间点]
+  日期:
+    synonyms: [时间, 日期时间]
+  开始时间:
+    synonyms: [起始时间, 开始日期]
+  结束时间:
+    synonyms: [终止时间, 结束日期, 截止日期]
+
+  # ===== 状态相关 =====
+  状态:
+    synonyms: [状况, 情况, 标志]
+  有效:
+    synonyms: [正常, 在用]
+  无效:
+    synonyms: [停用, 作废, 删除]
+
+  # ===== 备注 =====
+  备注:
+    synonyms: [说明, 注释, 描述]
+  说明:
+    synonyms: [备注, 描述]

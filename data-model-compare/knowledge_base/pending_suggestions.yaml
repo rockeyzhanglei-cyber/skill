@@ -1,0 +1,10 @@
+field_mapping: []
+synonym_add: []
+synonym_remove:
+- match_type: synonym
+  target_field: 院区名称
+  wrongly_matched_to: 分院名称
+- match_type: synonym
+  target_field: 院区名称
+  wrongly_matched_to: 分院名称
+table_synonym: []

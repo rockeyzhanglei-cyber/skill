@@ -1,0 +1,84 @@
+{
+  "skill_name": "frontend-dev",
+  "evals": [
+    {
+      "id": 1,
+      "name": "create-user-list-page",
+      "prompt": "实现一个用户列表页面，包含：\n1. 用户表格（显示姓名、邮箱、状态）\n2. 搜索功能（按姓名搜索）\n3. 分页功能\n4. 新增/编辑按钮\n\n项目技术栈：Vue 3 + Spark 框架 + win-design 组件库",
+      "expected_output": "生成符合 Vue 3 + Spark 框架规范的用户列表页面组件，使用 win-design 组件（w-table, w-input, w-button 等），从 spark 导入 API，使用 TypeScript 类型定义",
+      "assertions": [
+        {
+          "name": "使用 script setup lang=ts",
+          "description": "必须使用 <script setup lang=\"ts\"> 语法"
+        },
+        {
+          "name": "从 spark 导入",
+          "description": "必须从 spark 导入 ref、computed、onMounted 等 API"
+        },
+        {
+          "name": "使用 win-design 组件",
+          "description": "必须使用 w-* 前缀的 win-design 组件（w-table, w-button 等）"
+        },
+        {
+          "name": "TypeScript 类型定义",
+          "description": "必须定义 Props 接口和 User 类型，禁止使用 any"
+        },
+        {
+          "name": "使用 i18n",
+          "description": "文案应使用 $t() 或 t() 进行国际化"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "vue2-to-vue3-migration",
+      "prompt": "将以下 Vue2 组件迁移到 Vue3 Composition API：\n\n```vue\n<template>\n  <div class=\"user-form\">\n    <el-form ref=\"form\" :model=\"form\" :rules=\"rules\">\n      <el-form-item label=\"姓名\" prop=\"name\">\n        <el-input v-model=\"form.name\" />\n      </el-form-item>\n      <el-form-item label=\"邮箱\" prop=\"email\">\n        <el-input v-model=\"form.email\" />\n      </el-form-item>\n    </el-form>\n    <el-button type=\"primary\" @click=\"submit\">提交</el-button>\n  </div>\n</template>\n\n<script>\nexport default {\n  name: 'UserForm',\n  props: {\n    visible: Boolean,\n    userData: Object\n  },\n  data() {\n    return {\n      form: { name: '', email: '' },\n      rules: {\n        name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],\n        email: [{ required: true, message: '请输入邮箱', trigger: 'blur' }]\n      }\n    };\n  },\n  computed: {\n    isEdit() {\n      return !!this.userData;\n    }\n  },\n  watch: {\n    userData(val) {\n      if (val) this.form = { ...val };\n    }\n  },\n  methods: {\n    submit() {\n      this.$refs.form.validate(valid => {\n        if (valid) this.$emit('submit', this.form);\n      });\n    }\n  }\n};\n</script>\n```\n\n请迁移为 Vue3 Composition API + win-design 组件库",
+      "expected_output": "迁移后的 Vue3 组件，使用 <script setup lang=\"ts\">，使用 win-design 组件（w-form, w-input, w-button），从 spark 导入 API，保持行为等价",
+      "assertions": [
+        {
+          "name": "使用 script setup lang=ts",
+          "description": "必须使用 <script setup lang=\"ts\"> 语法"
+        },
+        {
+          "name": "el-form 替换为 w-form",
+          "description": "Element Plus 组件必须替换为 win-design 组件"
+        },
+        {
+          "name": "defineProps 定义 Props",
+          "description": "必须使用 defineProps<T>() 定义 props"
+        },
+        {
+          "name": "defineEmits 定义事件",
+          "description": "必须使用 defineEmits 定义 emit 事件"
+        },
+        {
+          "name": "响应式使用 ref/reactive",
+          "description": "data() 必须迁移为 ref() 或 reactive()"
+        },
+        {
+          "name": "行为等价",
+          "description": "迁移后的组件行为必须与原组件等价（props、emits、功能）"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "permission-constraint-check",
+      "prompt": "我需要在 src/global.ts 中添加一个全局工具函数，用于格式化日期。请帮我实现这个功能。",
+      "expected_output": "AI 应该拒绝修改 src/global.ts，并提供替代方案（如在 src/utils/ 或模块内创建工具函数）",
+      "assertions": [
+        {
+          "name": "拒绝修改禁止文件",
+          "description": "必须拒绝修改 src/global.ts，说明权限限制"
+        },
+        {
+          "name": "提供替代方案",
+          "description": "必须提供在允许路径内的替代方案"
+        }
+      ],
+      "files": []
+    }
+  ]
+}
