@@ -20,6 +20,7 @@ import csv
 import json
 import sys
 import argparse
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -34,7 +35,6 @@ def read_csv(csv_path, encoding='utf-8'):
             rows.append(clean_row)
         return rows
 
-
 def load_table_scope(task_dir):
     """加载表范围"""
     scope_path = Path(task_dir) / 'table_scope.json'
@@ -42,6 +42,56 @@ def load_table_scope(task_dir):
         with open(scope_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     return None
+
+
+def parse_pk_from_docx(docx_path):
+    """从table_structure.md解析主键定义
+    返回: {表名: [(字段名, 序号), ...], ...}
+    识别规则：说明列中包含"复合主键"或"联合主键"的字段
+    """
+    if not docx_path or not Path(docx_path).exists():
+        return {}
+    
+    pk_map = {}
+    
+    with open(docx_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # 按表分割：## 表36：JCJLB（检查记录表）
+    table_sections = re.split(r'^## 表\d+：(\w+)', content, flags=re.MULTILINE)
+    
+    for i in range(1, len(table_sections), 2):
+        table_name = table_sections[i]
+        table_content = table_sections[i + 1] if i + 1 < len(table_sections) else ''
+        
+        # 只解析到下一个## 表或---分隔符
+        table_content = re.split(r'^## 表\d+|^---', table_content, flags=re.MULTILINE)[0]
+        
+        # 解析字段表格行
+        pk_fields = []
+        for line in table_content.split('\n'):
+            if not line.startswith('|'):
+                continue
+            parts = [p.strip() for p in line.split('|')]
+            if len(parts) < 8 or parts[1] in ('', '序号', '---'):
+                continue
+            
+            seq = parts[1]
+            col_name = parts[2]
+            description = parts[7] if len(parts) > 7 else ''
+            
+            try:
+                seq_int = int(seq)
+            except ValueError:
+                continue
+            
+            if '复合主键' in description or '联合主键' in description:
+                pk_fields.append((col_name, seq_int))
+        
+        if pk_fields:
+            pk_map[table_name] = pk_fields
+    
+    return pk_map
 
 
 def build_oracle_type(row):
@@ -205,9 +255,15 @@ def group_tables(table_names):
     return result
 
 
-def parse_tables(rows):
+def parse_tables(rows, pk_map=None):
     """从CSV行解析所有表结构"""
+    if pk_map is None:
+        pk_map = {}
+    
     tables = defaultdict(lambda: {'columns': [], 'pk_cols': [], 'pk_constraint': '', 'table_comment': ''})
+    
+    # 用于跟踪已添加的字段，避免重复
+    added_columns = defaultdict(set)
     
     for row in rows:
         table_name = row.get('TABLE_NAME', '')
@@ -221,6 +277,11 @@ def parse_tables(rows):
         table_comment = row.get('TABLE_COMMENTS', '')
         col_comment = row.get('COLUMN_COMMENTS', '')
         
+        # 去重：如果该字段已添加，跳过
+        if col_name in added_columns[table_name]:
+            continue
+        added_columns[table_name].add(col_name)
+        
         col_def = {
             'name': col_name,
             'type_def': build_oracle_type(row),
@@ -233,21 +294,32 @@ def parse_tables(rows):
         tables[table_name]['columns'].append(col_def)
         tables[table_name]['table_comment'] = table_comment or tables[table_name]['table_comment']
         
-        if pk_flag == 'Y':
+        # 主键判断：优先使用table_structure.md中的定义，其次使用CSV中的PK_FLAG
+        if table_name in pk_map:
+            for pk_col_name, pk_position_from_md in pk_map[table_name]:
+                if pk_col_name == col_name:
+                    tables[table_name]['pk_cols'].append({
+                        'name': col_name,
+                        'position': pk_position_from_md,
+                    })
+                    tables[table_name]['pk_constraint'] = f'PK_{table_name}'
+                    break
+        elif pk_flag == 'Y' and pk_constraint and pk_constraint.upper() != 'NULL':
             tables[table_name]['pk_cols'].append({
                 'name': col_name,
                 'position': int(pk_position) if pk_position else 9999,
             })
-            if pk_constraint:
-                tables[table_name]['pk_constraint'] = pk_constraint
+            tables[table_name]['pk_constraint'] = pk_constraint
     
     return tables
 
 
-def generate_rebuild_script(rows, table_scope=None):
+def generate_rebuild_script(rows, table_scope=None, pk_map=None):
     """生成重建DDL脚本（DROP + CREATE）"""
+    if pk_map is None:
+        pk_map = {}
     
-    tables = parse_tables(rows)
+    tables = parse_tables(rows, pk_map)
     
     # 确定表列表
     if table_scope:
@@ -271,7 +343,7 @@ def generate_rebuild_script(rows, table_scope=None):
     lines.append("-- 第一阶段: 删除现有表（忽略表不存在错误）")
     lines.append("")
     
-    # DROP阶段：每组的DROP语句放在一个PL/SQL块中，组间用/分隔
+    # DROP阶段：每个DROP语句独立执行，每个BEGIN/END块后都有/
     # 使用PL/SQL块是为了忽略表不存在的错误（ORA-00942），不是业务异常捕获
     for group in table_groups:
         for table_name in group:
@@ -281,7 +353,7 @@ def generate_rebuild_script(rows, table_scope=None):
             lines.append(f"    WHEN OTHERS THEN")
             lines.append(f"        IF SQLCODE != -942 THEN RAISE; END IF;")
             lines.append(f"END;")
-        lines.append("/")
+            lines.append("/")
         lines.append("")
     
     lines.append("-- 第二阶段: 创建新表")
@@ -298,19 +370,25 @@ def generate_rebuild_script(rows, table_scope=None):
             lines.append(f"CREATE TABLE {table_name} (")
             
             col_defs = []
+            # 收集主键字段名
+            pk_col_names = set(c['name'] for c in table['pk_cols'])
+            
             for col in columns:
                 parts = [f"    {col['name']} {col['type_def']}"]
                 
                 # DEFAULT必须在NOT NULL之前
                 if col['default'] is not None:
                     parts.append(f"DEFAULT {col['default']}")
-                if not col['nullable']:
+                # 主键字段强制NOT NULL
+                if not col['nullable'] or col['name'] in pk_col_names:
                     parts.append("NOT NULL")
                 
                 col_defs.append(" ".join(parts))
             
             lines.append(",\n".join(col_defs))
             lines.append(");")
+            lines.append("/")
+            lines.append("")
             
             # 主键约束 - 只有原表有主键
             is_derived_table = table_name.endswith('_TRAN') or table_name.endswith('_LOG')
@@ -319,9 +397,8 @@ def generate_rebuild_script(rows, table_scope=None):
                 pk_col_names = [c['name'] for c in pk_cols]
                 pk_constraint = table['pk_constraint'] or f"PK_{table_name}"
                 lines.append(f"ALTER TABLE {table_name} ADD CONSTRAINT {pk_constraint} PRIMARY KEY ({', '.join(pk_col_names)});")
-        
-        lines.append("/")
-        lines.append("")
+                lines.append("/")
+                lines.append("")
     
     return "\n".join(lines)
 
@@ -390,11 +467,19 @@ def main():
     parser.add_argument('--output', required=True, help='输出SQL文件路径')
     parser.add_argument('--task-dir', help='任务目录路径（用于读取table_scope.json）')
     parser.add_argument('--encoding', default='utf-8', help='CSV编码（默认utf-8）')
+    parser.add_argument('--doc', help='table_structure.md文档路径（用于读取主键定义）')
     args = parser.parse_args()
     
     # 读取CSV
     rows = read_csv(args.csv, args.encoding)
     print(f"✓ 读取CSV: {len(rows)} 行")
+    
+    # 解析table_structure.md获取主键定义
+    pk_map = {}
+    if args.doc:
+        pk_map = parse_pk_from_docx(args.doc)
+        if pk_map:
+            print(f"✓ 从文档解析主键: {len(pk_map)} 张表有主键定义")
     
     # 加载表范围
     table_scope = None
@@ -405,7 +490,7 @@ def main():
     
     # 生成脚本
     if args.mode == 'rebuild':
-        sql = generate_rebuild_script(rows, table_scope)
+        sql = generate_rebuild_script(rows, table_scope, pk_map)
     else:
         sql = generate_fix_script(rows, table_scope)
     
