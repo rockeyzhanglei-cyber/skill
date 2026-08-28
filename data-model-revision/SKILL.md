@@ -277,8 +277,9 @@ S1→S3、S2→S3 等纯数据类型变更不需要修改。
 
 **可复用知识库**：TECH_SUFFIXES（约60个技术后缀，通用）/ SYNONYM（约500对同义词，医疗行业通用）/ BLOCK_LIST（少量字段特定，每文档需过一遍）
 
-> 技术后缀完整列表、同义词示例、`sem_cat` 语义类别判断、`match` 匹配函数等详细实现见 [references/semantic_matching_engine.md](references/semantic_matching_engine.md)。
-> **可直接执行的完整引擎（V8）见 `references/semantic-match-engine.py`** —— 实际使用以该 .py 为准，文档为精简示例。
+> **⚠️ 执行标准比对（场景B）语义匹配前必读**：[references/semantic_matching_engine.md](references/semantic_matching_engine.md)
+> 含技术后缀完整列表、同义词示例、`sem_cat` 语义类别判断、`match` 匹配函数。
+> **实际调用以 `references/semantic-match-engine.py`（V8 完整引擎）为准**，本文档为精简示例。
 
 ---
 
@@ -298,7 +299,8 @@ S1→S3、S2→S3 等纯数据类型变更不需要修改。
 
 **MinerU 分页问题（关键！）**：按页提取会把跨页表格拆成多个 HTML 片段，导致同一表数据分割、部分字段丢失（如 T_HD_PATIENT_QUIT 只剩 15 个字段）、继承表字段不完整。应对：① 提取所有 HTML 表格；② 继承表用基表数据补充；③ pdftotext 截断的字段名对照 PDF 原文修复。
 
-> pdftotext 导致的**字段名截断对照表**（约 48 条）与**合并行修复清单**（4 条）见 [references/pdf_extraction.md](references/pdf_extraction.md)。
+> **⚠️ 用 pdftotext 提取表结构后必读**：[references/pdf_extraction.md](references/pdf_extraction.md)
+> 若发现字段名疑似截断（如 `EQUIPMENT_BR`、`ADMISSION_TI`）或多列合并成一行，对照其中的**字段名截断对照表**（约 48 条）与**合并行修复清单**（4 条）修复。
 
 ---
 
@@ -820,8 +822,8 @@ Doris 存储 UTF-8 中文，**1 个汉字 3 字节、1 个特殊字符 4 字节*
 
 ### 语法差异（GP → Doris，由转换器处理）
 
-> 完整的 Greenplum → Doris 语法差异对照表、同表合并规则、转换后 SQL 示例见 [references/doris_ddl.md](references/doris_ddl.md)。
-> 转换由 `scripts/convert_doris.py` 自动完成，该表供人工核查与排错参考。
+> **何时读**：Doris 转换结果报错、或需人工核对转换是否正确时读 [references/doris_ddl.md](references/doris_ddl.md)。
+> 含 Greenplum → Doris 语法差异对照表、同表合并规则、转换后 SQL 示例。转换由 `scripts/convert_doris.py` 自动完成。
 
 **校验**：`verify_sql.py <输出.sql> --db doris`（查 numeric/timestamp 残留 + 字符串长度非 4 倍数）。
 

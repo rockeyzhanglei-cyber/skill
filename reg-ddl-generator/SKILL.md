@@ -301,7 +301,8 @@ PDF标注`必填`的字段，Word中经常被错误标为`C`（有则必填）�
 | 内容区域注释 | **不加**步骤注释（如 `-- 检查表是否存在`、`-- 添加字段注释`） |
 | 字段注释 | 直接生成COMMENT语句，不加说明文字 |
 
-> 完整的注释风格示例（Oracle 新增表 / 新增字段）见 [references/script-examples.md](references/script-examples.md) 第一部分。
+> **⚠️ 生成 DDL 注释（变更清单、COMMENT 语句）前必读**：[references/script-examples.md](references/script-examples.md) 第一部分
+> 含 Oracle 新增表 / 新增字段的注释风格完整示例。
 
 
 ---
@@ -349,7 +350,8 @@ PDF标注`必填`的字段，Word中经常被错误标为`C`（有则必填）�
 | 系统表查询 | 使用 `sys.tables` 判断表存在，`sys.columns` 判断字段存在 |
 | OBJECT_ID | 使用 `object_id('表名')` 获取表对象ID |
 
-> 完整的 SQL Server（全大写/全小写）与 Oracle 新增字段/新增表脚本示例见 [references/script-examples.md](references/script-examples.md) 第二部分。
+> **⚠️ 生成 SQL Server / Oracle 新增字段或建表脚本前必读**：[references/script-examples.md](references/script-examples.md) 第二部分
+> 含 SQL Server 全大写 / 全小写、Oracle 新增字段的完整脚本示例（原表 + TRAN + LOG 三表）。
 
 
 ---

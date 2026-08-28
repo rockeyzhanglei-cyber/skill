@@ -165,7 +165,8 @@ python scripts/kb_health_check.py --min-score 2 \
 
 ### 历史修复记录
 
-> 完整的迭代修复记录（V6.0实测修复、P6多表关联通道、否定确认强判死、自验证降噪、round6条件装配固化、P6外键方向否决、matching_core 重构等）见 [CHANGELOG.md](CHANGELOG.md).
+> **何时读**：排查历史问题、追溯某个判据的来龙去脉、或改动匹配逻辑前了解背景时读（**非日常执行必需**）。
+> 内容：V6.0实测修复、P6多表关联通道、否定确认强判死、自验证降噪、round6条件装配固化、P6外键方向否决、matching_core 重构等，见 [CHANGELOG.md](CHANGELOG.md).
 
 ## 三种工作模式
 
@@ -284,7 +285,8 @@ python scripts/kb_health_check.py --min-score 2 \
 **确认模式**（默认）：3轮全部跑完后汇总所有问题输出报告，等用户确认后通过 `/skill-creator` 统一修复，再重跑比对+3轮验证确认修复有效。
 **自动模式**：跳过人工确认，验证→`/skill-creator`修复→验证全自动循环，最多5轮。只改知识库和配置，不改代码。
 
-> 分层抽样表、核验标准、3轮具体安排、汇总报告格式、核验记录格式等详细步骤见 [references/self_validation_detail.md](references/self_validation_detail.md).
+> **⚠️ 执行自验证流程前必读**：[references/self_validation_detail.md](references/self_validation_detail.md)
+> 含分层抽样表（各 match_type 的抽样数与核验重点）、核验判断标准、3轮具体安排、汇总报告格式、核验记录格式。
 
 ## 程序修改规范（强制）
 
@@ -309,7 +311,7 @@ python scripts/kb_health_check.py --min-score 2 \
 
 ## 核心功能与安装
 
-> 核心功能概述与安装依赖见 [references/install.md](references/install.md).
+> **何时读**：首次部署本 Skill、或排查依赖缺失（python-docx / pandas / openpyxl / marker-pdf 等）时读 [references/install.md](references/install.md).
 
 ## 配置文件
 
