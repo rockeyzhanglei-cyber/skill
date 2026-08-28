@@ -16,6 +16,87 @@ metadata:
 4. **验证闭环** - 代码生成后必须运行测试验证
 5. **风格统一** - 遵循 Spark 框架和 win-design 组件库规范
 
+## ⚠️ WinMetrics 上报（技能启动）【强制执行】
+
+**在开始执行 frontend-dev 技能前，必须先执行 WinMetrics 技能启动上报：**
+
+```python
+# Windows: python -c "<script_content>"
+# Linux/Mac: python << 'EOF' ... EOF
+import sys, os
+
+# 检查 skill-winmetrics 是否已安装，未安装则自动下载
+_skill_dir = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'skill-winmetrics', 'scripts')
+if not os.path.exists(os.path.join(_skill_dir, 'skill_winmetrics.py')):
+    import subprocess
+    _installer = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'win-skill-installer', 'scripts', 'main.py')
+    subprocess.run([sys.executable, _installer, 'skill-winmetrics'], check=True)
+
+sys.path.insert(0, _skill_dir)
+from skill_winmetrics import SkillWinMetrics
+
+wm = SkillWinMetrics('frontend-dev', demand_id='{DEMAND_ID}')
+wm.report_skill_started(repo_name='{仓库名}')
+```
+
+> **重要提醒**：
+> - 仅独立调用时执行此上报（流水线内调用时跳过）
+> - 此步骤不可跳过，必须在开始执行 frontend-dev 流程前执行
+
+---
+
+## ⚠️ WinMetrics 事件上报（强制执行）
+
+**必须执行以下 WinMetrics 上报，不可跳过。**
+
+### 事件上报时机
+
+| 时机 | 事件名称 | 调用方法 | 必须执行 |
+|------|----------|----------|----------|
+| **技能启动时** | frontend-dev.started | `wm.report_skill_started()` | ✅ 独立调用时必须上报 |
+| **技能完成时** | frontend-dev.completed | `wm.report_skill_completed()` | ✅ 独立调用时必须上报 |
+
+### 强制执行规则
+
+1. **独立调用时**（无 AUTO_DEV_PIPELINE 环境变量）：
+   - ✅ 必须上报 `frontend-dev.started`（技能启动）
+   - ✅ 必须上报 `frontend-dev.completed`（技能完成）
+
+2. **流水线内调用时**（有 AUTO_DEV_PIPELINE=true）：
+   - ⏭️ 跳过 `frontend-dev.started` 和 `frontend-dev.completed`（auto-dev 已上报 stage 级事件）
+
+### WinMetrics 初始化与上报代码
+
+```python
+import sys, os
+
+# 检查 skill-winmetrics 是否已安装，未安装则自动下载
+_skill_dir = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'skill-winmetrics', 'scripts')
+if not os.path.exists(os.path.join(_skill_dir, 'skill_winmetrics.py')):
+    import subprocess
+    _installer = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'win-skill-installer', 'scripts', 'main.py')
+    subprocess.run([sys.executable, _installer, 'skill-winmetrics'], check=True)
+
+sys.path.insert(0, _skill_dir)
+from skill_winmetrics import SkillWinMetrics
+
+# 初始化WinMetrics上报器（技能开始时执行）
+wm = SkillWinMetrics('frontend-dev', demand_id='{DEMAND_ID}')
+
+# 技能启动上报（仅独立调用时执行）
+wm.report_skill_started(repo_name='{仓库名}')
+
+# ... 执行开发流程 ...
+
+# 技能完成上报（仅独立调用时执行）
+wm.report_skill_completed(
+    demand_id='{DEMAND_ID}',
+    status='success'
+)
+```
+
+---
+
 ## 执行模式说明
 
 本 Skill 的执行分为两个阶段，**全程在主对话中完成**：
@@ -170,7 +251,7 @@ cp [用户指定路径] product-docs/[需求号]/
 
 无论是否使用 superpowers，都需要先读取项目规范：
 
-1. 读取项目根目录的 `CLAUDE.md`（如果存在）
+1. 读取项目根目录的 `AGENTS.md`（如果存在）
 2. 读取前端规范文件（如 `.cursor/rules`、`docs/frontend-guide.md` 等）
 3. 提取关键信息：
    - 框架版本（Vue 3 + Spark）
@@ -209,7 +290,7 @@ cp [用户指定路径] product-docs/[需求号]/
 任务描述应包含：
 - 需求来源（TFS 工作项 / PRD 文档 / 用户描述）
 - 需求核心内容（Step 0 获取的信息）
-- 技术栈背景（刚读取的 CLAUDE.md 内容）
+- 技术栈背景（刚读取的 AGENTS.md 内容）
 - 输出要求（技术方案 + 实现路径）
 ```
 
@@ -1265,6 +1346,42 @@ hintStatus.value = hintStatusData;
 ```
 ✅ 开发完成 → 💬 告诉我"提交并同步" → 🚀 自动完成提交、合并、推送
 ```
+
+---
+
+## ⚠️ WinMetrics 上报（技能完成）【强制执行】
+
+**在输出工作总结前，必须先执行 WinMetrics 技能完成上报：**
+
+```python
+# Windows: python -c "<script_content>"
+# Linux/Mac: python << 'EOF' ... EOF
+import sys, os
+sys.path.insert(0, os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'skill-winmetrics', 'scripts'))
+from skill_winmetrics import SkillWinMetrics
+
+wm = SkillWinMetrics('frontend-dev', demand_id='{DEMAND_ID}')
+
+files_changed = [文件数]
+lines_added = [新增行数]
+lines_deleted = [删除行数]
+type_check_passed = [类型检查是否通过]
+lint_passed = [lint是否通过]
+
+wm.report_skill_completed(
+    demand_id='{DEMAND_ID}',
+    status='success',
+    files_changed=files_changed,
+    lines_added=lines_added,
+    lines_deleted=lines_deleted,
+    type_check_passed=type_check_passed,
+    lint_passed=lint_passed
+)
+```
+
+> **重要提醒**：
+> - 仅独立调用时执行此上报（流水线内调用时跳过）
+> - 此步骤不可跳过，必须在输出工作总结前执行
 
 ---
 

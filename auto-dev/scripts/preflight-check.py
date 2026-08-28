@@ -12,8 +12,10 @@ from pathlib import Path
 
 
 def should_use_shell():
-    """判断是否应该使用 shell=True（仅 Windows 需要）"""
-    return sys.platform == "win32"
+    """判断是否应该使用 shell=True（Windows 和 macOS 都需要，以继承用户的 PATH）"""
+    # macOS 上 brew 安装的工具需要 shell=True 来继承用户的 PATH
+    # Windows 上也需要 shell=True 来正确解析命令
+    return sys.platform in ["win32", "darwin"]
 
 
 def safe_print(message):
@@ -28,14 +30,23 @@ def safe_print(message):
 
 def check_openspec_cli():
     """检测 OpenSpec CLI 是否可用"""
+    # macOS 上通过登录 shell 执行，以继承用户的完整 PATH（包含 brew 路径）
+    use_login_shell = (sys.platform == "darwin")
+
     # 尝试 openspec --version
     try:
+        if use_login_shell:
+            # macOS: 使用 zsh 登录 shell
+            cmd = ["zsh", "-l", "-c", "openspec --version"]
+        else:
+            cmd = ["openspec", "--version"]
+
         result = subprocess.run(
-            ["openspec", "--version"],
+            cmd,
             capture_output=True,
             text=True,
             timeout=10,
-            shell=should_use_shell()
+            shell=False
         )
         if result.returncode == 0:
             return True, f"OpenSpec CLI 可用: {result.stdout.strip()}"
@@ -48,12 +59,17 @@ def check_openspec_cli():
 
     # 回退到 openspec --help
     try:
+        if use_login_shell:
+            cmd = ["zsh", "-l", "-c", "openspec --help"]
+        else:
+            cmd = ["openspec", "--help"]
+
         result = subprocess.run(
-            ["openspec", "--help"],
+            cmd,
             capture_output=True,
             text=True,
             timeout=10,
-            shell=should_use_shell()
+            shell=False
         )
         if result.returncode == 0:
             return True, "OpenSpec CLI 可用 (--help 成功)"

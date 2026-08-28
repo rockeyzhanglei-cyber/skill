@@ -13,6 +13,112 @@ metadata:
 
 自动化 Git 分支同步与合并工作流，确保代码同步过程安全、可追溯。
 
+## ⚠️ WinMetrics 上报（技能启动）【强制执行】
+
+**在开始执行 git-merge 技能前，必须先执行 WinMetrics 技能启动上报：**
+
+```python
+# Windows: python -c "<script_content>"
+# Linux/Mac: python << 'EOF' ... EOF
+import sys, os
+import subprocess
+
+# 检查 skill-winmetrics 是否已安装，未安装则自动下载
+_skill_dir = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'skill-winmetrics', 'scripts')
+if not os.path.exists(os.path.join(_skill_dir, 'skill_winmetrics.py')):
+    _installer = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'win-skill-installer', 'scripts', 'main.py')
+    subprocess.run([sys.executable, _installer, 'skill-winmetrics'], check=True)
+
+sys.path.insert(0, _skill_dir)
+from skill_winmetrics import SkillWinMetrics
+
+# 获取当前分支名和仓库名
+branch_name = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True).stdout.strip()
+repo_name = subprocess.run(['git', 'rev-parse', '--show-toplevel'], capture_output=True, text=True).stdout.strip()
+repo_name = os.path.basename(repo_name)
+
+# 从分支名提取demand_id（可选）
+import re
+demand_id = None
+match = re.search(r'feature/(\d+)', branch_name)
+if match:
+    demand_id = match.group(1)
+
+wm = SkillWinMetrics('git-merge', demand_id=demand_id)
+wm.report_skill_started(repo_name=repo_name, branch_name=branch_name)
+```
+
+> **重要提醒**：
+> - 仅独立调用时执行此上报（流水线内调用时跳过）
+> - 此步骤不可跳过，必须在开始执行 git-merge 流程前执行
+> - 如果无法从分支名提取 demand_id，使用仓库名作为标识
+
+---
+
+## ⚠️ WinMetrics 事件上报（强制执行）
+
+**必须执行以下 WinMetrics 上报，不可跳过。**
+
+### 事件上报时机
+
+| 时机 | 事件名称 | 调用方法 | 必须执行 |
+|------|----------|----------|----------|
+| **技能启动时** | git-merge.started | `wm.report_skill_started()` | ✅ 独立调用时必须上报 |
+| **技能完成时** | git-merge.completed | `wm.report_skill_completed()` | ✅ 独立调用时必须上报 |
+
+### 强制执行规则
+
+1. **独立调用时**（无 AUTO_DEV_PIPELINE 环境变量）：
+   - ✅ 必须上报 `git-merge.started`（技能启动）
+   - ✅ 必须上报 `git-merge.completed`（技能完成）
+
+2. **流水线内调用时**（有 AUTO_DEV_PIPELINE=true）：
+   - ⏭️ 跳过 `git-merge.started` 和 `git-merge.completed`（auto-dev 已上报 stage 级事件）
+
+### WinMetrics 初始化与上报代码
+
+```python
+import sys, os
+import subprocess
+
+# 检查 skill-winmetrics 是否已安装，未安装则自动下载
+_skill_dir = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'skill-winmetrics', 'scripts')
+if not os.path.exists(os.path.join(_skill_dir, 'skill_winmetrics.py')):
+    _installer = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'win-skill-installer', 'scripts', 'main.py')
+    subprocess.run([sys.executable, _installer, 'skill-winmetrics'], check=True)
+
+sys.path.insert(0, _skill_dir)
+from skill_winmetrics import SkillWinMetrics
+
+# 获取当前分支名和仓库名
+branch_name = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True).stdout.strip()
+repo_name = subprocess.run(['git', 'rev-parse', '--show-toplevel'], capture_output=True, text=True).stdout.strip()
+repo_name = os.path.basename(repo_name)
+
+# 从分支名提取demand_id（可选）
+import re
+demand_id = None
+match = re.search(r'feature/(\d+)', branch_name)
+if match:
+    demand_id = match.group(1)
+
+# 初始化WinMetrics上报器（技能开始时执行）
+wm = SkillWinMetrics('git-merge', demand_id=demand_id)
+
+# 技能启动上报（仅独立调用时执行）
+wm.report_skill_started(repo_name=repo_name, branch_name=branch_name)
+
+# ... 执行 Git 操作流程 ...
+
+# 技能完成上报（仅独立调用时执行）
+wm.report_skill_completed(
+    repo_name=repo_name,
+    status='success'
+)
+```
+
+---
+
 ## ⚠️ 核心原则
 
 **必须严格按照以下步骤顺序执行，不得跳过任何步骤：**
@@ -203,7 +309,7 @@ git status --porcelain
 **命令**：
 ```bash
 git branch --show-current
-git config --get claude-merge.mainBranch
+git config --get Codex-merge.mainBranch
 ```
 
 **情况 A - 已配置主分支**：
@@ -227,7 +333,7 @@ git config --get claude-merge.mainBranch
   • 自定义输入
 ```
 
-配置后保存：`git config claude-merge.mainBranch master`
+配置后保存：`git config Codex-merge.mainBranch master`
 
 ---
 
@@ -422,7 +528,7 @@ git merge master
 **⚠️ 分支保护检查（推送前必须执行）**：
 ```bash
 CURRENT_BRANCH=$(git branch --show-current)
-MAIN_BRANCH=$(git config --get claude-merge.mainBranch)
+MAIN_BRANCH=$(git config --get Codex-merge.mainBranch)
 # 检查1: 当前分支是否就是主分支（保护分支）
 [[ "$CURRENT_BRANCH" == "$MAIN_BRANCH" ]] && { echo "❌ BLOCKED: 当前分支 '$CURRENT_BRANCH' 是主分支/保护分支，禁止推送。只允许推送 feature/* 开发的分支。"; exit 1; }
 # 检查2: 当前分支不应以 develop/master/main/release 等保护名称开头
@@ -507,6 +613,50 @@ git push -u origin feature/1506090-add-value-id
 | 权限错误 | `❌ 权限不足，请检查认证配置` |
 | 合并失败 | `❌ 合并失败: [错误详情]` + 回退选项 |
 | 推送失败 | `❌ 推送失败: [错误详情]` + 重试选项 |
+
+---
+
+## ⚠️ WinMetrics 上报（技能完成）【强制执行】
+
+**在输出工作总结前，必须先执行 WinMetrics 技能完成上报：**
+
+```python
+# Windows: python -c "<script_content>"
+# Linux/Mac: python << 'EOF' ... EOF
+import sys, os
+import subprocess
+sys.path.insert(0, os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'skill-winmetrics', 'scripts'))
+from skill_winmetrics import SkillWinMetrics
+
+# 获取仓库名
+repo_name = subprocess.run(['git', 'rev-parse', '--show-toplevel'], capture_output=True, text=True).stdout.strip()
+repo_name = os.path.basename(repo_name)
+
+# 从分支名提取demand_id（可选）
+import re
+branch_name = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True).stdout.strip()
+demand_id = None
+match = re.search(r'feature/(\d+)', branch_name)
+if match:
+    demand_id = match.group(1)
+
+wm = SkillWinMetrics('git-merge', demand_id=demand_id)
+
+commits_pushed = [推送的提交数]
+conflicts_resolved = [是否有冲突解决]
+status = 'success' if commits_pushed > 0 else 'failed'
+
+wm.report_skill_completed(
+    repo_name=repo_name,
+    status=status,
+    commits_pushed=commits_pushed,
+    conflicts_resolved=conflicts_resolved
+)
+```
+
+> **重要提醒**：
+> - 仅独立调用时执行此上报（流水线内调用时跳过）
+> - 此步骤不可跳过，必须在输出工作总结前执行
 
 ---
 

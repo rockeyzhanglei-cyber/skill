@@ -41,6 +41,37 @@ metadata:
 - 功能清单未找到时，必须使用 `AskUserQuestion` 让用户明确选择
 - 禁止自动跳过或自行决定继续
 
+---
+
+## ⚠️ WinMetrics 上报（技能启动）【强制执行】
+
+**在开始执行 PM 技能前，必须先执行 WinMetrics 技能启动上报：**
+
+```python
+# Windows: python -c "<script_content>"
+# Linux/Mac: python << 'EOF' ... EOF
+import sys, os
+
+# 检查 skill-winmetrics 是否已安装，未安装则自动下载
+_skill_dir = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'skill-winmetrics', 'scripts')
+if not os.path.exists(os.path.join(_skill_dir, 'skill_winmetrics.py')):
+    import subprocess
+    _installer = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'win-skill-installer', 'scripts', 'main.py')
+    subprocess.run([sys.executable, _installer, 'skill-winmetrics'], check=True)
+
+sys.path.insert(0, _skill_dir)
+from skill_winmetrics import SkillWinMetrics
+
+wm = SkillWinMetrics('pm', demand_id='{DEMAND_ID}')
+wm.report_skill_started(product='{产品名}')
+```
+
+> **重要提醒**：
+> - 仅独立调用时执行此上报（流水线内调用时跳过）
+> - 此步骤不可跳过，必须在开始执行 PM 流程前执行
+
+---
+
 ## 七阶段工作流
 
 | 阶段 | 名称 | 输出文件 |
@@ -61,7 +92,63 @@ metadata:
 > - TFS 工作项使用工作项 ID 作为目录名和文件名前缀
 > - 手动输入需求使用年月日作为目录名和文件名前缀
 
-## 内置工具
+---
+
+## ⚠️ WinMetrics 事件上报（强制执行）
+
+**必须执行以下两个 WinMetrics 上报，不可跳过。**
+
+### 事件上报时机
+
+| 时机 | 事件名称 | 调用方法 | 必须执行 |
+|------|----------|----------|----------|
+| **技能启动时** | pm.started | `wm.report_skill_started()` | ✅ 独立调用时必须上报 |
+| **技能完成时** | pm.completed | `wm.report_skill_completed()` | ✅ 独立调用时必须上报 |
+
+### 强制执行规则
+
+1. **独立调用时**（无 AUTO_DEV_PIPELINE 环境变量）：
+   - ✅ 必须上报 `pm.started`（技能启动）
+   - ✅ 必须上报 `pm.completed`（技能完成）
+
+2. **流水线内调用时**（有 AUTO_DEV_PIPELINE=true）：
+   - ⏭️ 跳过 `pm.started` 和 `pm.completed`（auto-dev 已上报 stage 级事件）
+
+### WinMetrics 初始化与上报代码
+
+```python
+import sys, os
+
+# 检查 skill-winmetrics 是否已安装，未安装则自动下载
+_skill_dir = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'skill-winmetrics', 'scripts')
+if not os.path.exists(os.path.join(_skill_dir, 'skill_winmetrics.py')):
+    import subprocess
+    _installer = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'win-skill-installer', 'scripts', 'main.py')
+    subprocess.run([sys.executable, _installer, 'skill-winmetrics'], check=True)
+
+sys.path.insert(0, _skill_dir)
+from skill_winmetrics import SkillWinMetrics
+
+# 初始化WinMetrics上报器
+wm = SkillWinMetrics('pm', demand_id='{DEMAND_ID}')
+
+# 技能启动上报（仅独立调用时执行）
+wm.report_skill_started(product='{产品名}')
+
+# ... 执行 PM 技能流程 ...
+
+# 技能完成上报（仅独立调用时执行）
+grade_level = '{A级需求}'  # 从评估报告中读取
+total_score = 103  # 从评估报告中读取
+wm.report_skill_completed(
+    demand_id='{DEMAND_ID}',
+    status='success',
+    grade_level=grade_level,
+    total_score=total_score
+)
+```
+
+---
 
 | 工具 | 用途 | 使用场景 |
 |------|------|----------|
@@ -701,6 +788,44 @@ mcp__tfs-mcp__tfs_change_state({ id: ANALYSIS_TASK_ID, state: "已解决" })
 |-----------|------|------|
 | **tfs-mcp** | TFS 工作项操作（获取、更新、上传） | 阶段0、阶段6 必需 |
 | **wiki-mcp** | Wiki 页面内容获取 | 阶段0.5 可选 |
+
+---
+
+## ⚠️ WinMetrics 上报（技能完成）【强制执行】
+
+**在输出工作总结前，必须先执行 WinMetrics 技能完成上报：**
+
+```python
+# Windows: python -c "<script_content>"
+# Linux/Mac: python << 'EOF' ... EOF
+import sys, os
+
+# 检查 skill-winmetrics 是否已安装，未安装则自动下载
+_skill_dir = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'skill-winmetrics', 'scripts')
+if not os.path.exists(os.path.join(_skill_dir, 'skill_winmetrics.py')):
+    import subprocess
+    _installer = os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'win-skill-installer', 'scripts', 'main.py')
+    subprocess.run([sys.executable, _installer, 'skill-winmetrics'], check=True)
+
+sys.path.insert(0, _skill_dir)
+from skill_winmetrics import SkillWinMetrics
+
+wm = SkillWinMetrics('pm', demand_id='{DEMAND_ID}')
+
+grade_level = '{A级需求}'
+total_score = 103
+
+wm.report_skill_completed(
+    demand_id='{DEMAND_ID}',
+    status='success',
+    grade_level=grade_level,
+    total_score=total_score
+)
+```
+
+> **重要提醒**：
+> - 仅独立调用时执行此上报（流水线内调用时跳过）
+> - 此步骤不可跳过，必须在输出工作总结前执行
 
 ---
 

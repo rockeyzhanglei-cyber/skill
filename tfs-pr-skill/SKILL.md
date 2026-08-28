@@ -58,8 +58,11 @@ git log -1 --pretty=format:"%s"
 
 从远程 URL 中解析出：
 - TFS 服务器地址
+- **集合名称**（URL 中 `/tfs/{collection}/` 部分，如 `WinCode`、`WINNING-6.0`）
 - 项目名称
 - 仓库名称
+
+**关键**：所有后续 MCP 调用必须传入 `collection` 参数（从 URL 提取的集合名称），避免使用默认集合导致仓库找不到。
 
 **如果无法识别仓库信息**，使用 AskUserQuestion 请求用户手动输入。
 
@@ -70,7 +73,8 @@ git log -1 --pretty=format:"%s"
 ```javascript
 mcp__tfs-mcp__tfs_list_branches({
   repositoryId: "<仓库名或ID>",
-  project: "<项目名>"
+  project: "<项目名>",
+  collection: "<集合名称>"
 })
 ```
 
@@ -182,6 +186,7 @@ AskUserQuestion:
 mcp__tfs-mcp__tfs_create_pr({
   repositoryId: "<仓库名或ID>",
   project: "<项目名>",
+  collection: "<集合名称>",
   sourceRefName: "refs/heads/{源分支}",
   targetRefName: "refs/heads/{目标分支}",
   title: "<PR标题>",
@@ -190,14 +195,22 @@ mcp__tfs-mcp__tfs_create_pr({
 })
 ```
 
-创建成功后，返回 PR 链接供用户访问：
+创建成功后，**修正 webUrl 中的集合名称**（TFS 返回的 webUrl 默认使用用户默认集合，需替换为实际的 collection 参数）：
+
+```python
+# 将 webUrl 中的默认集合替换为实际集合
+# 例如: .../tfs/WINNING-6.0/Skill/_git/... → .../tfs/WinCode/Skill/_git/...
+corrected_webUrl = webUrl.replace(f"/tfs/{default_collection}/", f"/tfs/{collection}/")
+```
+
+返回 PR 链接供用户访问：
 
 ```
 ✅ PR 创建成功！
 - PR 编号: #{pullRequestId}
 - PR 标题: {title}
 - 关联任务: #{taskId1}, #{taskId2}, ...
-- 链接: {webUrl}
+- 链接: {corrected_webUrl}
 ```
 
 ### 步骤 6: 自动进入代码评审
@@ -233,7 +246,7 @@ mcp__tfs-mcp__tfs_create_pr({
 页面地址格式：{server}/{collection}/{project}/_git/{repo}/pullrequest/{prId}?_a=overview
 API 地址格式：{server}/{collection}/_apis/git/repositories/{repoId}/pullRequests/{prId}
 ```
-从 URL 中提取：project、repositoryId/repositoryName、pullRequestId
+从 URL 中提取：collection、project、repositoryId/repositoryName、pullRequestId
 
 ### 步骤 1: 确定 PR ID（仅场景 C/D）
 
@@ -253,6 +266,7 @@ API 地址格式：{server}/{collection}/_apis/git/repositories/{repoId}/pullReq
 mcp__tfs-mcp__tfs_get_pr({
   repositoryId: "<仓库名或ID>",
   project: "<项目名>",
+  collection: "<集合名称>",
   pullRequestId: <PR编号>
 })
 ```
@@ -263,12 +277,14 @@ mcp__tfs-mcp__tfs_get_pr({
 mcp__tfs-mcp__tfs_get_pr_diffs({
   repositoryId: "<仓库名或ID>",
   project: "<项目名>",
+  collection: "<集合名称>",
   pullRequestId: <PR编号>
 })
 
 mcp__tfs-mcp__tfs_get_pr_commits({
   repositoryId: "<仓库名或ID>",
   project: "<项目名>",
+  collection: "<集合名称>",
   pullRequestId: <PR编号>
 })
 ```
@@ -279,6 +295,7 @@ mcp__tfs-mcp__tfs_get_pr_commits({
 mcp__tfs-mcp__tfs_get_pr_workitems({
   repositoryId: "<仓库名或ID>",
   project: "<项目名>",
+  collection: "<集合名称>",
   pullRequestId: <PR编号>
 })
 ```
@@ -429,6 +446,7 @@ mcp__tfs-mcp__tfs_get_pr_workitems({
 mcp__tfs-mcp__tfs_add_pr_comment({
   repositoryId: "<仓库名或ID>",
   project: "<项目名>",
+  collection: "<集合名称>",
   pullRequestId: <PR编号>,
   content: "评审报告内容（Markdown格式）"
 })
