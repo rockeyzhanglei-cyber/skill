@@ -94,15 +94,17 @@ keywords: 数据模型修订 改表 加字段 加表 修订需求 生成DDL 修�
 
 ## 核心工作流
 
+> 完整链路如下，**阶段1-5** 在本文档下方各有专章详述；前置/委托/收尾三个环节为衔接步骤，不单独设章。
+
 ```
-Stage 1: 需求分析 → 解析需求、确定版本、匹配文档路径
-Stage 2: PDF数据提取 → 从PDF标准文档提取表结构
-Stage 3: Word文档修订 → 填充表格数据、设置格式
-Stage 4: 逐行核对 → 手工逐行比对PDF与Word（核心！不可跳过）
-Stage 5: DDL脚本生成 → 调用reg-ddl-generator
-Stage 6: 修订记录生成 → edsm_revise_record + edsm_revise_detail
-Stage 7: 修订记录Word维护 → 复制行→填充→新numId
-Stage 8: 生成summary.md → 输出修订总结到{DOCS_DIR}/summary.md
+[前置] 需求分析 → 解析需求、确定版本、匹配文档路径
+阶段1: PDF数据提取 → 从PDF标准文档提取表结构
+阶段2: Word文档修订 → 填充表格数据、设置格式
+阶段3: 逐行核对 → 手工逐行比对PDF与Word（核心！不可跳过）
+[委托] DDL脚本生成 → 调用 reg-ddl-generator（见该 Skill）
+阶段4: 修订记录SQL生成 → edsm_revise_record + edsm_revise_detail
+阶段5: 修订记录Word维护 → 复制行→填充→新numId
+[收尾] 生成summary.md → 输出修订总结到{DOCS_DIR}/summary.md
 ```
 
 **重要**：在auto-dev流水线中，git操作由Step 4统一处理，本Skill不执行git add/commit。
@@ -264,132 +266,19 @@ S1→S3、S2→S3 等纯数据类型变更不需要修改。
 
 ### 通用语义匹配引擎
 
-#### 适用场景
-将区域标准规范与省平台/国家平台标准规范进行比对，按"只增不减不更名"原则修订。
+**适用场景**：将区域标准规范与省平台/国家平台标准规范比对，按"只增不减不更名"原则修订。
 
-#### 核心算法
+**核心算法**：`省字段名 → normalize → 同义词替换 → 去后缀(TECH_SUFFIXES) → core`；双方 core 比较（精确 > 同义词核心 > 同义包含≥30% > 同义词全名）。
 
-```
-省字段名 → normalize → 同义词替换 → 去后缀(TECH_SUFFIXES) → core
-医字段名 → normalize → 同义词替换 → 去后缀(TECH_SUFFIXES) → core
-                       ↓
-          比较core（精确 > 同义词核心 > 同义包含≥30% > 同义词全名）
-```
+**关键规则**：
+- **跨类别禁止**：代码/编码类 ≠ 名称/日期/金额/标志类（同核心例外）
+- **包含比限制**：被包含部分/总长度 ≥ 30% 才接受
+- **短核心兜底**：核心≤3字时回退到同义词全名匹配
 
-#### 关键规则
+**可复用知识库**：TECH_SUFFIXES（约60个技术后缀，通用）/ SYNONYM（约500对同义词，医疗行业通用）/ BLOCK_LIST（少量字段特定，每文档需过一遍）
 
-**跨类别禁止**：代码/编码类 ≠ 名称/日期/金额/标志类（同核心例外）
-**包含比限制**：被包含部分/总长度 ≥ 30% 才接受
-**短核心兜底**：核心≤3字时回退到同义词全名匹配
-
-#### 可复用的知识库
-
-| 组件 | 说明 |
-|------|------|
-| TECH_SUFFIXES(技术后缀) | 约60个，所有文档通用 |
-| SYNONYM(同义词) | 约500对，医疗行业通用 |
-| BLOCK_LIST(阻塞列表) | 少量字段特定，每个文档需过一遍 |
-
-#### 技术后缀列表
-
-```python
-TECH_SUFFIXES = [
-    '代码','名称','编码','标志','标识','类别','号码','编号','日期','时间',
-    '金额','费用','类型','方式','途径','级别','描述','原因','说明','单位',
-    '情况','来源','标准','分类','格式','数据','信息','记录','明细','结果',
-    '报告','项目','指标','参数','值域','范围','流水号','状态','编码','规格',
-    '品级','归类','密码','账号','途径','工号','编号','性质','特征','操作','姓名'
-]
-```
-
-#### 同义词示例
-
-```python
-SYNONYM = {
-    '患者':'病人','病人':'患者','院区':'分院','分院':'院区',
-    '社保卡':'医保卡','医保卡':'社保卡','预约':'挂号','挂号':'预约',
-    '就诊':'诊疗','诊疗':'就诊','门诊':'门急诊','门急诊':'门诊',
-    '就诊状态':'是否就诊','是否就诊':'就诊状态',
-    '是否专家':'专家号','专家号':'是否专家',
-    '科室':'科室代码','科室代码':'科室','费用':'金额','金额':'费用',
-    '诊察费':'挂号费','挂号费':'诊察费','个人支付':'自付','自付':'个人支付',
-    '身份证号':'证件号码','证件号码':'身份证号',
-    '身份证件':'证件','证件':'身份证件','身份证':'证件',
-    '联系电话':'电话','电话':'联系电话','手机':'手机号','手机号':'手机',
-    '预约途径':'挂号途径','挂号途径':'预约途径',
-    '出生地':'出生地','工作单位电话':'电话',
-    '医疗费用支付方式':'支付方式','支付方式':'医疗费用支付方式',
-    '医保':'医保','个人医保账户':'个人支付','个人支付':'个人医保账户',
-    '院内科室':'科室','平台科室':'科室','病人性别':'性别','性别':'病人性别',
-    '新生儿出生体重':'新生儿体重','住院天数':'住院天数','住院日':'住院天数',
-    '住院次数':'入院次数','入院次数':'住院次数','住院':'住院','入院':'住院',
-    '出院':'出院','修改标志':'修改','数据状态':'修改',
-    '预约挂号':'预约','预约挂号标识':'预约','退号标志':'退号','退号':'退号标志',
-    '是否急诊':'急诊','急诊':'是否急诊','是否急诊挂号':'急诊',
-    '挂号操作员':'操作员','操作员':'挂号操作员',
-    '是否专家号':'专家','专家':'是否专家号',
-    # ... 完整版见skill references/semantic-match-engine.py
-}
-```
-
-#### 语义类别判断
-
-```python
-def sem_cat(name):
-    """判断字段语义类别"""
-    if name.endswith(('代码','编码','工号','号码')): return 'code'
-    if name.endswith(('名称','名字')): return 'name'
-    if name.endswith(('日期','时间')): return 'date'
-    if name.endswith(('金额','费用','费')): return 'amount'
-    if name.endswith(('标志','标识')): return 'flag'
-    return 'other'
-```
-
-#### 匹配函数
-
-```python
-def match(prov_name, yn_name):
-    """语义匹配，返回(score, reason)"""
-    p = core(prov_name)  # normalize + 同义词 + 去后缀
-    y = core(yn_name)
-    
-    # 1. 跨类别禁止
-    pc, yc = sem_cat(prov_name), sem_cat(yn_name)
-    # 代码类 ≠ 名称/日期/金额/描述/级别/状态/单位
-    if pc == 'code' and yc in ('name','date','amount','desc','level','status','unit'):
-        if p == y: return 95, '跨类别同核心'
-        return 0, '跨类别'
-    # 名称类 ≠ 代码/编码
-    if pc == 'name' and yc == 'code':
-        if p == y: return 95, '跨类别同核心'
-        return 0, '跨类别'
-    # 日期类 ≠ 代码/编码
-    if pc == 'date' and yc == 'code': return 0, '跨类别'
-    # 金额类 ≠ 代码/编码/标志
-    if pc == 'amount' and yc in ('code','flag'): return 0, '跨类别'
-    # 标志类 ≠ 金额
-    if pc == 'flag' and yc == 'amount': return 0, '跨类别'
-    
-    # 2. 同义词核心匹配
-    ps = synonyms(p); ys = synonyms(y)
-    for sp in ps:
-        for sy in ys:
-            if sp == sy: return 90, f'同义词核心:{sp}'
-            # 包含关系（双方核心≥3字）
-            if len(sp) >= 3 and len(sy) >= 3:
-                if sp in sy or sy in sp:
-                    ratio = len(min(sp,sy,key=len))/len(max(sp,sy,key=len))
-                    if ratio >= 0.3: return 80, f'同义包含(比{ratio:.0%})'
-    
-    # 3. 同义词全名匹配（无后缀剥离）
-    pn = syn_full(prov_name); yn = syn_full(yn_name)
-    if pn == yn: return 85, '同义词全名匹配'
-    if pn in yn or yn in pn:
-        ratio = len(min(pn,yn,key=len))/len(max(pn,yn,key=len))
-        if ratio >= 0.3: return 75, f'同义词全名包含(比{ratio:.0%})'
-    
-    return 0, ''
-```
+> 技术后缀完整列表、同义词示例、`sem_cat` 语义类别判断、`match` 匹配函数等详细实现见 [references/semantic_matching_engine.md](references/semantic_matching_engine.md)。
+> **可直接执行的完整引擎（V8）见 `references/semantic-match-engine.py`** —— 实际使用以该 .py 为准，文档为精简示例。
 
 ---
 
@@ -403,96 +292,17 @@ def match(prov_name, yn_name):
 
 ---
 
-## 阶段2：PDF数据提取（重要经验）
+## 阶段1：PDF数据提取（重要经验）
 
-### 工具选择
+**工具选择**：MinerU（mineru-open-api）⭐⭐⭐⭐⭐ 质量最佳，缺点是分页会拆分表格；pdftotext ⭐⭐⭐（字段名截断、合并行、噪声多）；OCR ⭐⭐⭐（中文识别一般、速度慢）。**推荐**：MinerU 提取主数据 + 人工核对补充。
 
-| 工具 | 质量 | 问题 |
-|-----|------|------|
-| **MinerU**（mineru-open-api） | ⭐⭐⭐⭐⭐ | 分页导致表格被拆分，表名错位 |
-| **pdftotext** | ⭐⭐⭐ | 字段名截断、合并行、噪声多 |
-| OCR | ⭐⭐⭐ | 中文识别一般，速度慢 |
+**MinerU 分页问题（关键！）**：按页提取会把跨页表格拆成多个 HTML 片段，导致同一表数据分割、部分字段丢失（如 T_HD_PATIENT_QUIT 只剩 15 个字段）、继承表字段不完整。应对：① 提取所有 HTML 表格；② 继承表用基表数据补充；③ pdftotext 截断的字段名对照 PDF 原文修复。
 
-**推荐方案**：MinerU提取主数据 + 人工核对补充
-
-### MinerU分页问题（关键！）
-
-MinerU按页提取，一个跨页的表格会被拆成多个HTML片段，导致：
-- 同一个表的数据被分割到不同页
-- 部分表的字段丢失（如T_HD_PATIENT_QUIT只有15个字段，因为分页只抓到了部分）
-- 继承表的字段不完整
-
-**应对策略**：
-1. 从MinerU提取所有HTML表格
-2. 对继承表（如T_HD_PATIENT_QUIT继承T_HD_PATIENT）用基表数据补充
-3. 对pdftotext截断的字段名，对照PDF原文修复
-
-### 已知的字段名截断问题（pdftotext导致）
-
-```
-EQUIP → EQUIP_ID
-EQUIPMENT_BR → EQUIPMENT_BRAND
-EQUIPMENT_MO → EQUIPMENT_MODEL
-EQUIPMENT_TY → EQUIPMENT_TYPE
-DIAGNOSIS_TI → DIAGNOSIS_TIME
-DIAGNOSIS_TY → DIAGNOSIS_TYPE
-NEOPATHY_TIM → NEOPATHY_TIME
-NEOPATHY_TYP → NEOPATHY_TYPE
-NEOPATHY_DES → NEOPATHY_DESC
-FOR_EMERGENC → FOR_EMERGENCY
-ADMISSION_TI → ADMISSION_TIME
-ADMISSION_CAUSE_DE → ADMISSION_CAUSE_DESC
-SNSTAT_DDATEATE → SN
-DIC_KE → DIC_KEY
-DIC_UN → DIC_UNIT
-END_TI → END_TIME
-EMG_START_TI → EMG_START_TIME
-DIVISION_NAM → DIVISION_NAME
-RRT_TY → RRT_TYPE
-RRT_TYPE_NAM → RRT_TYPE_NAME
-BICARBONATE_RADICA → BICARBONATE_RADICAL
-DIALYSIS_DAT → DIALYSIS_DATE
-DOWN_NURSE_I → DOWN_NURSE_ID
-CARD_N → CARD_NO
-MZ_FLA → MZ_FLAG
-INSPECTED_TY → INSPECTED_TYPE
-REPORT_CATEG → REPORT_CATEGORY
-RECORD_CCOUN → RECORD_COUNT
-DIAGNOSE_COD → DIAGNOSE_CODE
-DIAGNOSE_NAM → DIAGNOSE_NAME
-INSPECTED_RESULT_N → INSPECTED_RESULT_NO
-UNIT_T → UNIT_TYPE
-INSPECTED_RE → INSPECTED_RESULT
-SORTIN → SORTING
-YEAR_C → YEAR_CNT
-DAY_CN → DAY_CNT
-MAX_DA → MAX_DATE
-HOSPITAL_NAM → HOSPITAL_NAME
-PATIENT_NKSEQUELDATEAE_DAT → PATIENT_NK（合并行）
-SEQUELAE_TYP → SEQUELAE_TYPE
-SUB_TY → SEQUELAE_SUB_TYPE
-EQUIP_TYPE_I → EQUIP_TYPE_ID / INSPECT_ID
-END_DA → END_DATE
-INSPECTED_ITEM_EN → INSPECTED_ITEM_EN_NAME
-ZZJHLS → ZZJHLSH
-ZZJHSD → ZZJHSDM
-ZZJHSM → ZZJHSMC
-ICUJRR → ICUJRRQ
-ICUTCR → ICUTCRQ
-```
-
-### 已知的合并行修复
-
-```
-PERMANENT_TYIN_DATDATEOUT_DADATE → PERMANENT_TYPE + IN_DATE + OUT_DATE
-LOCAL_INSURANCEDIALYSDATEIS_START_TIM → LOCAL_INSURANCE + DIALYSIS_START_TIME
-BORN_DATEDIALYSDATEIS_START_TIM → BORN_DATE + DIALYSIS_START_TIME
-REMOVE_REASON_DESCSETUP_DATE → REMOVE_REASON_DESC + SETUP_DATE
-```
+> pdftotext 导致的**字段名截断对照表**（约 48 条）与**合并行修复清单**（4 条）见 [references/pdf_extraction.md](references/pdf_extraction.md)。
 
 ---
 
-## 阶段3：Word文档修订（核心经验）
+## 阶段2：Word文档修订（核心经验）
 
 ### 表格格式要求（必须遵守）
 
@@ -534,7 +344,7 @@ REMOVE_REASON_DESCSETUP_DATE → REMOVE_REASON_DESC + SETUP_DATE
 
 ---
 
-## 阶段4：逐行核对（最重要！不可跳过！）
+## 阶段3：逐行核对（最重要！不可跳过！）
 
 ### 不要用自动化脚本替代人工核对
 
@@ -563,7 +373,7 @@ REMOVE_REASON_DESCSETUP_DATE → REMOVE_REASON_DESC + SETUP_DATE
 
 ---
 
-## 阶段6：修订记录SQL生成（重要经验）
+## 阶段4：修订记录SQL生成（重要经验）
 
 ### 修订摘要格式（summary字段）
 
@@ -702,7 +512,7 @@ insert into edsm_revise_detail(...)values(...);
 
 ---
 
-## 阶段7：修订记录Word文档维护
+## 阶段5：修订记录Word文档维护
 
 ### 修订历史内容要求
 
@@ -849,6 +659,18 @@ insert into edsm_revise_detail(...)values(...);
 | business_id超长 | 合并行字段名太长 | 拆分后缩短 |
 | 缺少分类记录 | 没生成datasetCategory | 补充3条分类 |
 | 缺少叶子记录 | 只有dataset没有datasetElement | 补充所有字段 |
+| 缺少元数据记录 | 只添加了datasetElement | 新字段需要同时添加metadata和datasetElement |
+| 元数据共用/串号 | 不同表的同名字段引用了同一份元数据 | 元数据必须一对一：每个 datasetElement 用 element_id 生成专属 metadata，metadataCode=element_id，绝不按字段名共用 |
+| 数据集缺少seqNo | 数据集记录没有序号 | 必须包含seqNo，且和文档顺序一致 |
+| 修订摘要太模糊 | 只写"删除4个字段" | 必须具体列出字段名和中文名 |
+
+### 前端代码错误
+
+| 错误 | 原因 | 修复 |
+|------|------|------|
+| 文件名和后端不一致 | 后端调整了命名但前端没改 | 检查后端表名/Entity名，保持前端一致 |
+| 添加了不需要的模块 | 需求只需要映射，却加了目录维护 | 根据需求确定功能范围 |
+| API路径不一致 | 前端路径和后端Controller不匹配 | 检查后端@RequestMapping路径 |
 
 
 ## 项目编码规则
@@ -920,28 +742,6 @@ src/
 - 可以在同一个页面使用Tab切换
 - 或者创建多个映射页面
 - 根据业务需求决定
-
----
-
-## 常见错误清单
-
-### 修订记录SQL错误
-
-| 错误 | 原因 | 修复 |
-|------|------|------|
-| 缺少元数据记录 | 只添加了datasetElement | 新字段需要同时添加metadata和datasetElement |
-| 元数据共用/串号 | 不同表的同名字段引用了同一份元数据 | 元数据必须一对一：每个 datasetElement 用 element_id 生成专属 metadata，metadataCode=element_id，绝不按字段名共用 |
-| 数据集缺少seqNo | 数据集记录没有序号 | 必须包含seqNo，且和文档顺序一致 |
-| 修订摘要太模糊 | 只写"删除4个字段" | 必须具体列出字段名和中文名 |
-| business_id超长 | 合并行字段名太长 | 拆分后缩短 |
-
-### 前端代码错误
-
-| 错误 | 原因 | 修复 |
-|------|------|------|
-| 文件名和后端不一致 | 后端调整了命名但前端没改 | 检查后端表名/Entity名，保持前端一致 |
-| 添加了不需要的模块 | 需求只需要映射，却加了目录维护 | 根据需求确定功能范围 |
-| API路径不一致 | 前端路径和后端Controller不匹配 | 检查后端@RequestMapping路径 |
 
 ---
 
@@ -1020,40 +820,8 @@ Doris 存储 UTF-8 中文，**1 个汉字 3 字节、1 个特殊字符 4 字节*
 
 ### 语法差异（GP → Doris，由转换器处理）
 
-| Greenplum | Doris |
-|-----------|-------|
-| `do $$ ... end $$;` | 展开为裸 SQL（不再用存储过程 / DELIMITER 写法） |
-| `ALTER TABLE ADD COLUMN IF NOT EXISTS` | 不写 if exists，直接裸 `alter table t add column c type null comment '...';` |
-| `COMMENT ON COLUMN ... IS ...` | 合并进 `alter table` / `create table` 的 `comment '...'` |
-| `TIMESTAMP` | `DATETIME` |
-| `INTEGER` | `INT` |
-| `NUMERIC(p,s)` | `DECIMAL(p,s)`（Doris 无 NUMERIC，原样透传报解析错误） |
-| 无DISTRIBUTED BY | `DISTRIBUTED BY HASH(首主键列) BUCKETS 8`（**固定 8**，用户 2026-08-27 确定） |
-| 无PROPERTIES | **不输出** `PROPERTIES ("replication_num" / "replication_allocation" ...)`（用户明确去除） |
-
-**同表合并（重要）**：同一张表的多个字段变更必须合并为**单条** ALTER 语句，多子句逗号分隔、分号在末条、缩进 4 空格；Doris 不允许同一张表分多条 ALTER。
-
-**示例（转换后）**：
-
-```sql
--- 表名中文[表名]新增字段：字段A中文[FIELD_A,O,S1,AN..50]、字段B中文[FIELD_B,O,N,N..10,2]
-alter table 表名
-    add column field_a varchar(200) null comment '字段A中文',   -- 文档 AN..50 → ×4
-    add column field_b decimal(10,2) null comment '字段B中文';
-```
-
-```sql
-create table if not exists 表名(
-    soid varchar(256) not null comment '系统编码',   -- 文档 AN..64 → ×4
-    name varchar(400) null comment '名称',            -- 文档 AN..100 → ×4
-    amount decimal(18,2) null comment '金额',
-    create_time datetime null comment '创建时间',      -- timestamp → datetime
-    remark text null comment '备注'                    -- 不限长度：text，不乘
-)
-unique key(soid)
-comment '表名中文'
-distributed by hash(soid) buckets 8;
-```
+> 完整的 Greenplum → Doris 语法差异对照表、同表合并规则、转换后 SQL 示例见 [references/doris_ddl.md](references/doris_ddl.md)。
+> 转换由 `scripts/convert_doris.py` 自动完成，该表供人工核查与排错参考。
 
 **校验**：`verify_sql.py <输出.sql> --db doris`（查 numeric/timestamp 残留 + 字符串长度非 4 倍数）。
 
@@ -1064,7 +832,7 @@ distributed by hash(soid) buckets 8;
 ```
 data-model-revision/
 ├── SKILL.md ← 本文件
-├── bypass.md ← 非交互/流水线模式说明（Stage 1-8 全自动）
+├── bypass.md ← 非交互/流水线模式说明（阶段1-5 全链路全自动）
 ├── skill-contract.md ← Skill 输入输出契约
 ├── references/
 │   ├── 6.0-spec.md ← 6.0版本详细规范（business_id格式、基础数据检查逻辑）
@@ -1074,7 +842,10 @@ data-model-revision/
 │   ├── revise-record-value-set-spec.md ← 值域修订记录规范
 │   ├── revise-record-schema.md ← 修订表(edsm_revise_record/detail)结构说明
 │   ├── common-errors.md ← 常见错误清单
-│   └── semantic-match-engine.py ← 标准比对语义匹配引擎
+│   ├── semantic-match-engine.py ← 标准比对语义匹配引擎（可执行，V8）
+│   ├── semantic_matching_engine.md ← 语义匹配引擎技术方案（知识库定义 + 匹配函数详解）
+│   ├── pdf_extraction.md ← 阶段1 PDF提取详细经验（字段名截断对照表、合并行修复）
+│   └── doris_ddl.md ← Doris DDL 语法差异对照（GP → Doris，转换器处理）
 ├── scripts/
 │   ├── revise_record_generator.py ← 修订记录生成脚本（核心，被本Skill调用）
 │   ├── check_comment_consistency.py ← 注释一致性检查（DDL↔修订记录，生成后必跑）
@@ -1085,6 +856,6 @@ data-model-revision/
     └── model-revision.yaml ← 流水线配置模板
 ```
 
-> ⚠️ **DDL 生成入口**：本 Skill 的 DDL 脚本统一**委托 `reg-ddl-generator` Skill** 生成（见核心工作流 Stage 5）。
+> ⚠️ **DDL 生成入口**：本 Skill 的 DDL 脚本统一**委托 `reg-ddl-generator` Skill** 生成（见核心工作流 [委托] DDL脚本生成 环节）。
 > 本目录下的 `scripts/ddl_generator.py` 为历史遗留（功能与 reg-ddl-generator 重复），已于 2026-08 归档移出，不再使用。
 > 新增/修改 DDL 时，直接调用 reg-ddl-generator，不要在此手写 DDL 生成逻辑。
