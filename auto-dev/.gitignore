@@ -1,8 +1,0 @@
-*.bak
-__pycache__/
-templates/products.yaml
-templates/pipeline.yaml
-config.env
-docs/
-.claude/
-.update-check.json

@@ -1,1 +1,0 @@
-**Absolute prohibition**: Do not execute any git commands (git add / commit / push / checkout / merge / rebase etc.). Code changes are written to workspace files only. Commits are handled by the main agent.

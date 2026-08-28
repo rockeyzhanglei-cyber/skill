@@ -28,3 +28,15 @@ _bm_skillid_migration.json
 
 # ===== 专家包（仅保留在 WorkBuddy 插件市场，不入库） =====
 expert/
+
+# ===== TFS 独立托管 Skill（由公司 TFS 维护，不入本仓库） =====
+pm/
+web-access/
+java-unit-test-generator/
+auto-dev/
+tfs-pr-skill/
+git-merge/
+win-skill-installer/
+frontend-dev/
+backend-dev/
+rdf-dev/
