@@ -32,6 +32,65 @@ def load_json(path):
         return json.load(f)
 
 
+def apply_condition_display_to_result(compare_result: dict, temp_dir: str,
+                                     conditions: dict = None,
+                                     rules: list = None) -> int:
+    """对【内存中】的比对结果装配 condition_display（纯内存，不写盘）。
+
+    供 regression_check 等需要"跑完比对直接在内存里判分"的场景复用，
+    避免为了拿 condition_display 而先写盘再读回。
+
+    Args:
+        compare_result: iter_compare_result 结构的 dict，会被就地修改
+        temp_dir: 用于定位 conditional_constraints.json
+        conditions / rules: 已加载好的配置；为 None 时自行从 temp_dir 读取
+
+    Returns:
+        注入的 condition_display 条数；无配置 / 无规则返回 0。
+    """
+    if conditions is None or rules is None:
+        cfg_path = os.path.join(os.path.expanduser(temp_dir),
+                                'conditional_constraints.json')
+        if not os.path.exists(cfg_path):
+            return 0
+        cfg = load_json(cfg_path)
+        conditions = cfg.get('conditions') or {}
+        rules = cfg.get('rules') or []
+    if not rules:
+        return 0
+
+    n = 0
+    for kind in ('matched', 'modified'):
+        for item in compare_result.get(kind, []):
+            tname = item.get('table_name', '') or ''
+            tfield = (item.get('target_field')
+                      or item.get('field_name') or '') or ''
+            if not tfield:
+                continue
+            for r in rules:
+                if tname not in (r.get('tables') or []):
+                    continue
+                fp = r.get('field_prefix') or ''
+                fexact = r.get('field') or ''
+                hit = bool(fexact and tfield == fexact) or bool(
+                    fp and tfield.startswith(fp))
+                if not hit:
+                    continue
+                cond_en = r.get('cond') or ''
+                cond = conditions.get(cond_en)
+                if not cond:
+                    continue
+                val = str(r.get('value', ''))
+                vname = (cond.get('values') or {}).get(val, '')
+                disp = f"{cond.get('chinese_name', '') or cond_en}[{cond_en}]={val}"
+                if vname:
+                    disp += f'[{vname}]'
+                item['condition_display'] = disp
+                n += 1
+                break
+    return n
+
+
 def apply_condition_display(temp_dir: str):
     """按 conditional_constraints.json 的 rules 给比对结果装配 condition_display。
 
@@ -63,35 +122,7 @@ def apply_condition_display(temp_dir: str):
         print(f'[条件装配] 备份 -> {bak}')
 
     cr = load_json(cmp_path)
-    n = 0
-    for kind in ('matched', 'modified'):
-        for item in cr.get(kind, []):
-            tname = item.get('table_name', '') or ''
-            tfield = (item.get('target_field')
-                      or item.get('field_name') or '') or ''
-            if not tfield:
-                continue
-            for r in rules:
-                if tname not in (r.get('tables') or []):
-                    continue
-                fp = r.get('field_prefix') or ''
-                fexact = r.get('field') or ''
-                hit = bool(fexact and tfield == fexact) or bool(
-                    fp and tfield.startswith(fp))
-                if not hit:
-                    continue
-                cond_en = r.get('cond') or ''
-                cond = conditions.get(cond_en)
-                if not cond:
-                    continue
-                val = str(r.get('value', ''))
-                vname = (cond.get('values') or {}).get(val, '')
-                disp = f"{cond.get('chinese_name', '') or cond_en}[{cond_en}]={val}"
-                if vname:
-                    disp += f'[{vname}]'
-                item['condition_display'] = disp
-                n += 1
-                break
+    n = apply_condition_display_to_result(cr, temp_dir, conditions, rules)
 
     with open(cmp_path, 'w', encoding='utf-8') as f:
         json.dump(cr, f, ensure_ascii=False, indent=2)

@@ -407,6 +407,7 @@ relations:
 | `scripts/audit_kb_veto.py` | 审计"知识库映射被否决"后的下游后果，防止网关误杀 | `audit_kb_veto.py <temp_dir>` |
 | `audit_user_custom_review.py`（项目 temp 下，可复用模板） | **新表路径 user_custom 回收硬冲突复核**：遍历 new_tables 中 match_type=='user_custom' 的条目，对每对 (目标,源) 调 `_user_custom_hard_conflict` 输出全部条目+可疑清单到文件 | `python <temp>/audit_user_custom_review.py <temp_dir>`（需按 SKILL_DIR 修改脚本头） |
 | `regenerate_reports.py`（项目 temp 下，可复用模板） | **跳过完整流程重新生成报告**：直接用 `iter_compare_result.json` 重出 HTML/MD/XLSX 三件套（含键名转换 modified→modified_fields），覆盖 reports/ | `python <temp>/regenerate_reports.py`（脚本内改 TEMP/OUT/TITLE） |
+| `scripts/regression_check.py` | **端到端回归守卫**（P1-1）。对真实全量数据重跑「比对+自验证+条件装配」，与 golden baseline 逐项对比（含**字段级指纹**），确认行为零变化；有差异退出码 1，可接 CI。详见下方「回归防止机制」 | `regression_check.py --task-dir <任务目录>` |
 
 **迭代纪律**：每次只改一个判据 → 立刻 `fast_iterate.py` → 看漏配/疑误配是否同时不劣化。
 **只看准确率会被自验证的覆盖盲区骗到**：自验证只覆盖它认识的匹配类型，
@@ -462,7 +463,28 @@ python3 <skill_root>/scripts/test_runner.py --check-regression
 
 ### 回归防止机制
 
-- **基线对比**：每次修改后自动对比基线，检测回归
+本 Skill 有**两套互补**的回归守卫，改动匹配逻辑时**两个都要跑**：
+
+| 守卫 | 覆盖面 | 速度 | 命令 |
+|------|--------|------|------|
+| **单元级** `test_runner.py` | `tests/test_cases.yaml` 的 27 条手工用例，覆盖规则点 | 秒级 | `python scripts/test_runner.py --check-regression` |
+| **端到端** `regression_check.py` | 真实全量数据（V6.0 任务 5349 个字段判定），覆盖整体行为 | 约 1-2 分钟 | `python scripts/regression_check.py --task-dir <任务目录>` |
+
+**为什么必须有端到端基线**：单元测试只有 27 条用例，真实任务却有 5000+ 字段判定。
+拆分 `standard_comparator.py`、重构 matcher 这类大改动，**单元测试全绿不等于行为没变**——
+只有字段级指纹比对能证明"行为零变化"。
+
+**端到端基线的关键能力**：不只比总数，还比对**每个字段的判定**（匹配类型 + 源字段 + 条件显示），
+因此能捕获「matched 总数不变，但某字段从 `synonym` 漂移成 `keyword`」这类静默变化——
+纯计数检测不出来。
+
+**维护方式**：
+- 基线文件：`tests/golden/<任务名>.json`（当前仅 V6.0医疗服务_vs_省平台v1.4.1医疗部分）
+- 人工确认本次结果正确后更新基线：`regression_check.py --task-dir <任务目录> --update-baseline`
+- 回归检查是**只读**的：结果只在内存判分，不覆盖 temp 下任何产物
+- 退出码：`0`=无回归 / `1`=检出回归 / `2`=参数或文件错误
+
+**其余机制**：
 - **测试覆盖**：每次修复都添加对应测试用例，确保问题不会再次出现
 - **持续积累**：测试用例库随使用不断完善，Skill 越来越智能
 
