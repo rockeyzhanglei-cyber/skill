@@ -216,7 +216,10 @@ class DataModelCompareV2:
 
     def __init__(self, config_path: str = None):
         self.config = self._load_config(config_path)
-        self.workspace = self.config.get('workspace', {}).get('root', '/Users/zhanglei/data-model-compare-docs')
+        # 输出根目录优先级：config.yaml(workspace.root) > 环境变量 DATA_STD_OUTPUT > 默认 ~/data-model-compare-docs
+        default_workspace = os.environ.get('DATA_STD_OUTPUT') or os.path.join(
+            os.path.expanduser('~'), 'data-model-compare-docs')
+        self.workspace = self.config.get('workspace', {}).get('root', default_workspace)
 
         # 初始化组件（按config.yaml中的实际key读取）
         self.converter = DocumentConverter(self.config.get('parsers', {}))
@@ -880,9 +883,10 @@ def main():
         print("检测到 --feedback 参数，开始处理 Excel 回写...")
         print("=" * 80)
 
-        # 推断任务目录
+        # 推断任务目录（与 DataModelCompareV2 的 workspace 推导保持一致）
         task_name = args.title.replace(' ', '_').replace('/', '_')
-        workspace = '/Users/zhanglei/data-model-compare-docs'
+        workspace = os.environ.get('DATA_STD_OUTPUT') or os.path.join(
+            os.path.expanduser('~'), 'data-model-compare-docs')
         task_dir = os.path.join(workspace, task_name)
         temp_dir = os.path.join(task_dir, 'temp')
 

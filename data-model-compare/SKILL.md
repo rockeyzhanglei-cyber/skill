@@ -36,7 +36,7 @@ keywords: 数据模型比对 标准比对 数据标准比对 模型比对 对比
 **直接运行脚本，不要自己写代码：**
 
 ```bash
-python3 ~/.cache/WinCode/skill/data-model-compare/main.py \
+python3 <skill_root>/main.py \
   --source <原标准文件路径> \
   --target <目标标准文件路径> \
   --title <报告标题>
@@ -44,7 +44,7 @@ python3 ~/.cache/WinCode/skill/data-model-compare/main.py \
 
 **多文件比对：**
 ```bash
-python3 ~/.cache/WinCode/skill/data-model-compare/main.py \
+python3 <skill_root>/main.py \
   --source <原标准文件1> <原标准文件2> \
   --target <目标标准文件>
 ```
@@ -69,7 +69,7 @@ python3 ~/.cache/WinCode/skill/data-model-compare/main.py \
 5. 生成报告（MD + HTML）
 6. 生成可编辑的Excel文件（用于人工核对；确认后回写知识库，P0 已实现跨表全局复用）
 
-**输出目录：** `/Users/zhanglei/data-model-compare-docs/<任务名>/reports/`
+**输出目录：** `<输出根目录>/<任务名>/reports/`（默认 `~/data-model-compare-docs`，可用环境变量 `DATA_STD_OUTPUT` 覆盖）
 
 **输出报告内容：**
 - **HTML报告**：汇总统计 + 目录导航 + 逐表详情 + 颜色标识（🟢满足 🟠需修改 🔴需新增）
@@ -83,14 +83,14 @@ python3 ~/.cache/WinCode/skill/data-model-compare/main.py \
 
 执行命令：
 ```bash
-python3 ~/.cache/WinCode/skill/data-model-compare/main.py \
+python3 <skill_root>/main.py \
   --source "/path/to/区域卫生信息平台数据传输规范_第01部分_医疗服务.docx" \
   --target "/path/to/全民健康信息平台数据接口标准规范_医疗部分.docx" \
   --title "云南v5.5_vs_省平台v1.4.1"
 ```
 
 输出：
-- 报告生成到：`/Users/zhanglei/data-model-compare-docs/云南v5.5_vs_省平台v1.4.1/reports/`
+- 报告生成到：`<输出根目录>/云南v5.5_vs_省平台v1.4.1/reports/`（如 `~/data-model-compare-docs/云南v5.5_vs_省平台v1.4.1/reports/`）
 - 包含：`compare_report.html` 和 `compare_report.md`
 - 报告中会显示：满足的字段数、需修改的字段数、需新增的字段数、需新增的表数
 
@@ -543,7 +543,7 @@ pip install marker-pdf pymupdf4llm
 
 ## 配置文件
 
-配置文件位于：`~/.cache/WinCode/skill/data-model-compare/config.yaml`
+配置文件位于：`<skill_root>/config.yaml`（默认 Skill 安装目录下）
 
 可配置项：
 - 工作目录（workspace.root）
@@ -654,17 +654,17 @@ relations:
 
 **运行所有测试：**
 ```bash
-python3 ~/.cache/WinCode/skill/data-model-compare/scripts/test_runner.py
+python3 <skill_root>/scripts/test_runner.py
 ```
 
 **保存测试基线：**
 ```bash
-python3 ~/.cache/WinCode/skill/data-model-compare/scripts/test_runner.py --save-baseline
+python3 <skill_root>/scripts/test_runner.py --save-baseline
 ```
 
 **检查回归：**
 ```bash
-python3 ~/.cache/WinCode/skill/data-model-compare/scripts/test_runner.py --check-regression
+python3 <skill_root>/scripts/test_runner.py --check-regression
 ```
 
 ### 修改规则的标准流程

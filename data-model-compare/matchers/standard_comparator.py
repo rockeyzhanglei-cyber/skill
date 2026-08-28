@@ -14,6 +14,11 @@ from typing import Dict, List, Tuple, Optional, Set
 from dataclasses import dataclass, field
 from parsers.standard_parser import StandardDocument, StandardTable, StandardField
 
+# 规则核心模块（唯一事实来源）：核心概念/显式同义判定统一入口
+from matchers.matching_core import core_compatible, in_explicit_synonym_dict, strip_generic
+from matchers.matching_core import COMPARATOR_PREFIXES as _CORE_GENERIC_PREFIXES
+from matchers.matching_core import GENERIC_SUFFIXES as _CORE_GENERIC_SUFFIXES
+
 # 引入缓存
 from utils.cache import get_similarity_from_cache, put_similarity_to_cache
 
@@ -4578,26 +4583,19 @@ class StandardComparator:
 
     # ===== P1：核心概念兼容性网关 =====
     # 通用前缀（实体/机构修饰，去掉后不影响“核心概念”判断）
-    _GENERIC_PREFIXES = ['机构内部', '门急诊', '门诊', '住院', '急诊', '患者', '医院',
-                         '卫生', '区域', '标准', '记录', '信息', '数据']
-    # 通用后缀（类型/命名修饰）
-    _GENERIC_SUFFIXES = ['代码', '编码', '代号', '编号', '名称', '名字', '姓名',
-                         '标识', '标志', '类型', '类别', '种类', '流水号', '英文名', '英文']
+    _GENERIC_PREFIXES = _CORE_GENERIC_PREFIXES
+    # 通用后缀（类型/命名修饰）。注意：'唯一' 不在默认后缀里（比对器行为保持旧版）。
+    _GENERIC_SUFFIXES = _CORE_GENERIC_SUFFIXES
 
     def _strip_generic(self, name: str) -> str:
-        """去掉通用前后缀，保留核心概念串。"""
-        s = name or ''
-        for p in self._GENERIC_PREFIXES:
-            if s.startswith(p):
-                s = s[len(p):]
-        for suf in self._GENERIC_SUFFIXES:
-            s = s.replace(suf, '')
-        return s.strip()
+        """去掉通用前后缀，保留核心概念串（比对器行为：COMPARATOR_PREFIXES，简单顺序剥，
+        无 '医疗机构' 前缀、不回退保护——与旧版完全一致）。"""
+        return strip_generic(name)
 
     def _core_concept_compatible(self, name1: str, name2: str) -> bool:
         """判断两个字段名是否指向同一核心概念（拦截同义词/语义的跨概念误匹配）。
 
-        规则：
+        规则（详细说明见 matchers/matching_core.core_compatible）：
         - 去掉通用前后缀后，若核心串完全相同 -> 兼容（如 科室代码 / 科室编码）
         - 若一个核心串是另一个的子串（更具体/更笼统的同义）-> 兼容
           （如 门急诊科室代码 / 门诊科室编码、患者姓名 / 姓名）
@@ -4605,25 +4603,12 @@ class StandardComparator:
         - 否则视为不同概念 -> 不兼容
           （如 机构内部药品通用名代码 / 医疗机构代码、检查流水号 / 就诊流水号、
             患者复诊标志 / 患者标识）
+
+        实现：委托 matchers.matching_core.core_compatible，行为 = 比对器旧版
+        （不前置归一 + 不额外剥 '唯一'），由匹配核心模块统一维护，self_validator
+        通过参数显式声明降噪差异（见其 _core）。
         """
-        if not name1 or not name2:
-            return True
-        c1 = self._strip_generic(name1)
-        c2 = self._strip_generic(name2)
-        if not c1 and not c2:
-            return True
-        if not c1 or not c2:
-            return False
-        # 归一化后再比：去空格 + 统一小写。
-        # RH 血型 vs Rh血型、ABO 血型 vs ABO血型 这类纯大小写/空格差异属同一概念，
-        # 此前仅因大小写或空格不同被判不兼容（RH 漏配、ABO 靠子串巧合才过）。
-        n1 = re.sub(r'\s+', '', c1).lower()
-        n2 = re.sub(r'\s+', '', c2).lower()
-        if n1 == n2:
-            return True
-        if n1 in n2 or n2 in n1:
-            return True
-        return False
+        return core_compatible(name1, name2)
 
     # 字段"种类"兼容网关：名称/代码/流水号 等类型不一致应判为不兼容，
     # 防止 临床路径流水号≠临床路径名称、科主任代码≠科主任执业证书编码 等跨种类误匹配。
@@ -4835,22 +4820,12 @@ class StandardComparator:
     def _in_explicit_synonym_dict(self, name1: str, name2: str,
                                   synonyms: dict) -> bool:
         """检查 name1↔name2 是否在显式同义词字典中声明。
-        
-        只检查全名精确匹配（name1 是字典 key 且 name2 在其 value 列表中，
-        或 name2 是字典 key 且 name1 在其 value 列表中）。
-        不进行子串匹配——避免"名称"→"姓名"等子串规则误跳核心概念网关。
+
+        实现：委托 matchers.matching_core.in_explicit_synonym_dict（唯一事实来源）。
+        只检查全名精确匹配 + value 子串命中，与 self_validator._is_explicit_synonym
+        保持一致（禁止漂移）。
         """
-        # 正向：name1 是 key，name2 在其 value 列表中
-        if name1 in synonyms:
-            for syn in synonyms[name1]:
-                if syn in name2 or name2 in syn:
-                    return True
-        # 反向：name2 是 key，name1 在其 value 列表中
-        if name2 in synonyms:
-            for syn in synonyms[name2]:
-                if syn in name1 or name1 in syn:
-                    return True
-        return False
+        return in_explicit_synonym_dict(name1, name2, synonyms)
 
     @staticmethod
     def _is_role_compatible_for_synonym(name1: str, name2: str) -> bool:
