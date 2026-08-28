@@ -1,0 +1,442 @@
+[
+  {
+    "tier": "A-高置信",
+    "score": 4,
+    "target_table": "*住院病案首页",
+    "target_field": "第一助手姓名",
+    "source_table": "西医病案首页",
+    "source_field": "病人姓名",
+    "evidence": [
+      "E1a(2分):核心概念缺失",
+      "E3(2分):同表该源字段已归属同名目标字段['患者姓名']"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 4,
+    "target_table": "*住院病案首页",
+    "target_field": "第二助手姓名",
+    "source_table": "西医病案首页",
+    "source_field": "病人姓名",
+    "evidence": [
+      "E1a(2分):核心概念缺失",
+      "E3(2分):同表该源字段已归属同名目标字段['患者姓名']"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 3,
+    "target_table": "*检查报告表",
+    "target_field": "是否异常",
+    "source_table": "检查记录表",
+    "source_field": "检查结果代码",
+    "evidence": [
+      "E1b(1分):核心概念不相干",
+      "E3(2分):同表该源字段已归属同名目标字段['检查结果代码']"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 3,
+    "target_table": "*门急诊病历",
+    "target_field": "门急诊病历流水号",
+    "source_table": "门(急)诊病历",
+    "source_field": "就诊流水号",
+    "evidence": [
+      "E1b(1分):核心概念不相干",
+      "E3(2分):同表该源字段已归属同名目标字段['就诊流水号']"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 3,
+    "target_table": "不良事件-药品不良事件",
+    "target_field": "患者姓名",
+    "source_table": "不良事件_药品不良事件",
+    "source_field": "性别",
+    "evidence": [
+      "E1a(2分):核心概念缺失",
+      "E2(1分):与多数簇['姓名']矛盾"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 3,
+    "target_table": "门诊/住院摘要",
+    "target_field": "门诊/住院摘要流水号",
+    "source_table": "卫生事件摘要",
+    "source_field": "就诊流水号",
+    "evidence": [
+      "E1b(1分):核心概念不相干",
+      "E3(2分):同表该源字段已归属同名目标字段['就诊流水号']"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "*中医病案首页",
+    "target_field": "主任医师代码",
+    "source_table": "西医病案首页",
+    "source_field": "科主任医师执业证书编码",
+    "evidence": [
+      "E1a(2分):字段种类冲突"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "*中医病案首页",
+    "target_field": "出院科别",
+    "source_table": "西医病案首页",
+    "source_field": "院内出院科室编码",
+    "evidence": [
+      "E1a(2分):字段种类冲突"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "*中医病案首页",
+    "target_field": "科主任代码",
+    "source_table": "西医病案首页",
+    "source_field": "科主任医师执业证书编码",
+    "evidence": [
+      "E1a(2分):字段种类冲突"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "*中医病案首页",
+    "target_field": "责任护士代码",
+    "source_table": "西医病案首页",
+    "source_field": "责任护士执业证书编码",
+    "evidence": [
+      "E1a(2分):字段种类冲突"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "*住院登记信息",
+    "target_field": "主治医师代码",
+    "source_table": "住院就诊记录表",
+    "source_field": "主治医师执业证书编码",
+    "evidence": [
+      "E1a(2分):字段种类冲突"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "*住院登记信息",
+    "target_field": "住院医师代码",
+    "source_table": "住院就诊记录表",
+    "source_field": "住院医师执业证书编码",
+    "evidence": [
+      "E1a(2分):字段种类冲突"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "*手术/操作记录",
+    "target_field": "患者姓名",
+    "source_table": "手术记录",
+    "source_field": "术者姓名",
+    "evidence": [
+      "E1a(2分):核心概念缺失"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "*检查记录表",
+    "target_field": "就诊类型代码",
+    "source_table": "检查记录表",
+    "source_field": "记录类别",
+    "evidence": [
+      "E1a(2分):核心概念缺失"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "*检验明细表",
+    "target_field": "检查仪器编号",
+    "source_table": "检验明细表",
+    "source_field": "检验仪器编码",
+    "evidence": [
+      "E1a(2分):字段种类冲突"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "不良事件-药品不良事件",
+    "target_field": "不良事件报告单位",
+    "source_table": "不良事件_药品不良事件",
+    "source_field": "不良事件报告单位签名",
+    "evidence": [
+      "E1a(2分):字段种类冲突"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "会诊记录-会诊医师",
+    "target_field": "门(急)诊号",
+    "source_table": "门诊就诊记录表",
+    "source_field": "姓名",
+    "evidence": [
+      "E1a(2分):核心概念缺失"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "体格及功能检查报告表",
+    "target_field": "体检大项目编号",
+    "source_table": "体格及功能检查报告表",
+    "source_field": "检查科目内部代码",
+    "evidence": [
+      "E1a(2分):字段种类冲突"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "体格及功能检查报告表",
+    "target_field": "报告医师签名",
+    "source_table": "体格及功能检查报告表",
+    "source_field": "报告/审核医师姓名",
+    "evidence": [
+      "E1a(2分):字段种类冲突"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "出院登记信息",
+    "target_field": "主治医师姓名",
+    "source_table": "出院登记信息",
+    "source_field": "姓名",
+    "evidence": [
+      "E1a(2分):核心概念缺失"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "出院登记信息",
+    "target_field": "住院医师姓名",
+    "source_table": "出院登记信息",
+    "source_field": "姓名",
+    "evidence": [
+      "E1a(2分):核心概念缺失"
+    ]
+  },
+  {
+    "tier": "A-高置信",
+    "score": 2,
+    "target_table": "患者院内感染信息表",
+    "target_field": "院内感染科室代码",
+    "source_table": "医院感染记录",
+    "source_field": "感染科室编号",
+    "evidence": [
+      "E1a(2分):字段种类冲突"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "*中医病案首页",
+    "target_field": "实施临床路径",
+    "source_table": "西医病案首页",
+    "source_field": "临床路径管理代码",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['临床路径管理代码']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "*住院病案首页",
+    "target_field": "再住院计划目的",
+    "source_table": "西医病案首页",
+    "source_field": "是否有出院31天内再住院计划",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['是否有出院31天内再住院计划']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "*住院诊断表",
+    "target_field": "就诊类型代码",
+    "source_table": "诊断明细报告",
+    "source_field": "门诊/住院标志",
+    "evidence": [
+      "E1b(1分):核心概念不相干",
+      "E2(1分):与多数簇['就诊类型代码']矛盾"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "*检查报告表",
+    "target_field": "检查定量结果",
+    "source_table": "检查记录表",
+    "source_field": "检查结果代码",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['检查结果代码']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "*检验记录表",
+    "target_field": "报告发布人（检验医师）姓名",
+    "source_table": "检验记录表",
+    "source_field": "检验医师姓名",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['检验医师姓名']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "*门急诊病历",
+    "target_field": "患者复诊标志",
+    "source_table": "门(急)诊病历",
+    "source_field": "初诊标志代码",
+    "evidence": [
+      "E1b(1分):核心概念不相干",
+      "E2(1分):与多数簇['初复诊标志']矛盾"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "不良事件-严重不良事件报告",
+    "target_field": "严重不良事件发生及处理的详细情况",
+    "source_table": "不良事件_严重不良事件报告",
+    "source_field": "不良事件报告类型名称",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['不良事件报告类型名称']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "不良事件-严重不良事件报告",
+    "target_field": "严重不良事件的医学术语（诊断）",
+    "source_table": "不良事件_严重不良事件报告",
+    "source_field": "不良事件报告类型代码",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['不良事件报告类型代码']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "不良事件-严重不良事件报告",
+    "target_field": "严重不良事件转归代码",
+    "source_table": "不良事件_严重不良事件报告",
+    "source_field": "不良事件报告类型代码",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['不良事件报告类型代码']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "不良事件-严重不良事件报告",
+    "target_field": "严重不良事件转归名称",
+    "source_table": "不良事件_严重不良事件报告",
+    "source_field": "不良事件报告类型名称",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['不良事件报告类型名称']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "不良事件-医疗安全事件",
+    "target_field": "不良事件报告医师代码",
+    "source_table": "不良事件_医疗安全事件报告",
+    "source_field": "不良事件类别代码",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['不良事件类别代码']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "不良事件-医疗安全事件",
+    "target_field": "不良事件报告医师姓名",
+    "source_table": "不良事件_医疗安全事件报告",
+    "source_field": "不良事件类别名称",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['不良事件类别名称']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "不良事件-医疗安全事件",
+    "target_field": "不良事件类别描述",
+    "source_table": "不良事件_医疗安全事件报告",
+    "source_field": "不良事件类别名称",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['不良事件类别名称']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "体格及功能检查明细表",
+    "target_field": "体检记录流水号",
+    "source_table": "体格及功能检查明细表",
+    "source_field": "报告流水号",
+    "evidence": [
+      "E1b(1分):核心概念不相干",
+      "E2(1分):与多数簇['体检流水号']矛盾"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "体格及功能检查明细表",
+    "target_field": "就诊流水号",
+    "source_table": "体格及功能检查明细表",
+    "source_field": "报告流水号",
+    "evidence": [
+      "E1b(1分):核心概念不相干",
+      "E2(1分):与多数簇['就诊流水号', '住院就诊流水号', '门诊/急诊/住院流水号']矛盾"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "体格及功能检查明细表",
+    "target_field": "检查结果标志",
+    "source_table": "体格及功能检查明细表",
+    "source_field": "结果提示",
+    "evidence": [
+      "E3(2分):同表该源字段已归属同名目标字段['结果提示']"
+    ]
+  },
+  {
+    "tier": "B-待确认",
+    "score": 2,
+    "target_table": "体检总检表",
+    "target_field": "就诊流水号",
+    "source_table": "体检总检表",
+    "source_field": "体检流水号",
+    "evidence": [
+      "E1b(1分):核心概念不相干",
+      "E2(1分):与多数簇['就诊流水号', '住院就诊流水号', '门诊/急诊/住院流水号']矛盾"
+    ]
+  }
+]

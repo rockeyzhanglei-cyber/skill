@@ -2,18 +2,18 @@
 
 ## 类型映射表
 
-| 原始类型 | MySQL | Oracle | SQL Server | PostgreSQL |
-|---------|--------|--------|------------|------------|
-| VARCHAR | VARCHAR | VARCHAR2 | VARCHAR | VARCHAR |
-| NUMBER | DECIMAL | NUMBER | DECIMAL | NUMERIC |
-| NUMERIC | DECIMAL | NUMBER | DECIMAL | NUMERIC |
-| INT | INT | NUMBER | INT | INTEGER |
-| INTEGER | INT | NUMBER | INT | INTEGER |
-| DATE | DATE | DATE | DATE | DATE |
-| DATETIME | DATETIME | DATE | DATETIME | TIMESTAMP |
-| TEXT | TEXT | CLOB | NVARCHAR(MAX) | TEXT |
-| CLOB | TEXT | CLOB | NVARCHAR(MAX) | TEXT |
-| BLOB | BLOB | BLOB | VARBINARY(MAX) | BYTEA |
+| 原始类型 | MySQL | Oracle | SQL Server | PostgreSQL | Doris |
+|---------|--------|--------|------------|------------|-------|
+| VARCHAR | VARCHAR | VARCHAR2 | VARCHAR | VARCHAR | VARCHAR |
+| NUMBER | DECIMAL | NUMBER | DECIMAL | NUMERIC | DECIMAL |
+| NUMERIC | DECIMAL | NUMBER | DECIMAL | NUMERIC | DECIMAL |
+| INT | INT | NUMBER | INT | INTEGER | INT |
+| INTEGER | INT | NUMBER | INT | INTEGER | INT |
+| DATE | DATE | DATE | DATE | DATE | DATE |
+| DATETIME | DATETIME | DATE | DATETIME | TIMESTAMP | DATETIME |
+| TEXT | TEXT | CLOB | NVARCHAR(MAX) | TEXT | TEXT（STRING 可） |
+| CLOB | TEXT | CLOB | NVARCHAR(MAX) | TEXT | TEXT（STRING 可） |
+| BLOB | BLOB | BLOB | VARBINARY(MAX) | BYTEA | 不支持，用 TEXT/JSON |
 
 ---
 
@@ -326,3 +326,57 @@ begin
     end if;
 end $$;
 ```
+
+---
+
+## Doris 模板（v4.6.0）
+
+> **生成路径**：先按 PostgreSQL 方言生成 probe（`--db postgresql --case lower --no-tran-log --no-public-fields`），再用 `scripts/convert_doris.py` 自动转换为 Doris 脚本。**不要在 probe 阶段手动改长度**，×4 由转换器统一完成。
+
+### 字符串长度 ×4 规则（用户 2026-08-28 确定）
+
+Doris 存储 UTF-8 中文：**1 个汉字 3 字节、1 个特殊字符 4 字节**。标准文档中字段长度按【字符数】控制，脚本必须按【字节数】定义，因此所有字符串字段长度统一 **×4**：
+
+| 文档表示格式 | 原始长度（PG probe） | Doris 最终长度 | 说明 |
+|-------------|---------------------|---------------|------|
+| `AN..100` | `varchar(100)` | `varchar(400)` | 100 个字符 × 4 字节 |
+| `AN..50` | `varchar(50)` | `varchar(200)` | |
+| `AN..n` / `A..n` / `S..n` / `N..n`(S类) | `varchar(n)` | `varchar(4n)` | 所有 VARCHAR/CHAR 统一处理 |
+| 不限长度 `AN..*` | `text` | `text` | 大字段类型不乘 |
+| 数值/日期 类型 | `numeric(p,s)` / `date` / `datetime` | `decimal(p,s)` / `date` / `datetime` | 不乘 |
+| `varchar(4000)`（最大） | `varchar(4000)` | `varchar(16000)` | 未超 Doris 上限 65533 |
+
+- **转换自动完成**：`convert_doris.py` 在转换时对 `varchar(n)`/`char(n)` 统一 ×4，并打印「字符串长度 ×4 处数」供核对。
+- **禁止提前手动 ×4**：probe 保持文档原始长度。若手动 ×4 后再转换，会变成 ×16。
+- **自检**：输出中所有 varchar/char 长度必须能被 4 整除（`verify_sql.py --db doris` 强制检查，非 4 倍数直接报警）。
+
+### 新增表（转换后）
+
+```sql
+-- 表名中文[表名] - 新增表
+create table if not exists 表名(
+    字段1 varchar(256) not null comment '字段1中文',   -- 文档 AN..64
+    字段2 varchar(400) null comment '字段2中文',        -- 文档 AN..100
+    金额字段 decimal(18,2) null comment '金额',
+    时间字段 datetime null comment '时间',               -- PostgreSQL timestamp → datetime
+    备注 text null comment '备注'                        -- 不限长度：text
+)
+unique key(主键字段1, 主键字段2)
+comment '表名中文'
+distributed by hash(主键字段1) buckets 8;
+```
+
+### 新增字段（转换后，同表合并为单条 ALTER）
+
+```sql
+-- 表名中文[表名]新增字段：字段A中文[FIELD_A,O,S1,AN..50]、字段B中文[FIELD_B,O,N,N..10,2]
+alter table 表名
+    add column field_a varchar(200) null comment '字段A中文',   -- 文档 AN..50
+    add column field_b decimal(10,2) null comment '字段B中文';
+```
+
+规则要点：
+- 同表多字段合并为【单条】ALTER（多子句逗号分隔、分号在末条、缩进 4 空格）；Doris 不允许同一张表分多条 ALTER。
+- 不写 if exists 幂等判断（Doris 无该语法），直接裸 ALTER；建表用 `if not exists`。
+- 桶数量固定 `buckets 8`；**不输出** `properties ('replication_num' = '...')`。
+- 校验：`verify_sql.py <输出.sql> --db doris`（查 numeric/timestamp 残留 + 字符串长度非 4 倍数）。

@@ -24,6 +24,7 @@ sys.path.insert(0, SKILL_DIR)
 from parsers.converter import DocumentConverter
 from parsers.standard_parser import StandardParser, StandardDocument
 from matchers.standard_comparator import StandardComparator
+from matchers.self_validator import self_validate
 from reporters.html_reporter import HTMLReporter
 from reporters.markdown_reporter import MarkdownReporter
 
@@ -440,13 +441,56 @@ class DataModelCompareV2:
         compare_result_path = os.path.join(temp_dir, 'compare_result.json')
         self._save_compare_result(compare_result, compare_result_path)
 
+        # 条件式值域约束装配（round6 固化）：读 conditional_constraints.json
+        # 的 rules 给 matched/modified 注入 condition_display（地址族/电话族），
+        # 同步回写 compare_result.json 与内存对象，三件套展示一致。
+        try:
+            import sys as _sys
+            _sys.path.insert(0, os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), 'scripts'))
+            from apply_conditional_constraints import apply_condition_display
+            merged = apply_condition_display(temp_dir)
+            if merged is not None:
+                compare_result.matched = merged['matched']
+                compare_result.modified = merged['modified']
+                compare_result.new_fields = merged['new_fields']
+                compare_result.new_tables = merged['new_tables']
+        except Exception as e:
+            print(f"  ⚠ 条件装配跳过: {e}")
+
+        # 报告目录（任务目录下）；提前创建，供值域字典/自验证等补充步骤写入报告
+        output_dir = os.path.join(task_dir, 'reports')
+        os.makedirs(output_dir, exist_ok=True)
+
+        # ========== 第三步（补充）：值域字典（代码表）比对 ==========
+        # 与字段结构比对并列的独立维度；解析两份"值域字典"并比较代码覆盖。
+        try:
+            vd_result = self._compare_value_domains_step(
+                source_files, target_md_dir, temp_dir, output_dir)
+            if vd_result:
+                monitor.record_match('value_domain', 'value_domain',
+                                     f"matched={vd_result['summary']['matched_count']}")
+        except Exception as e:
+            print(f"  ⚠ 值域字典比对跳过: {e}")
+            import traceback
+            traceback.print_exc()
+
+        # ========== 第三步（补充2）：自验证（漏配/误匹配检测 + KB 修复建议）===========
+        try:
+            sv_result = self._self_validate_step(
+                compare_result, source_std_path, target_std_path, temp_dir, output_dir)
+            if sv_result:
+                monitor.record_match('self_validation', 'self_validation',
+                                     f"leaks={sv_result['summary']['leak_count']},"
+                                     f"suspects={sv_result['summary']['suspect_count']}")
+        except Exception as e:
+            print(f"  ⚠ 自验证跳过: {e}")
+            import traceback
+            traceback.print_exc()
+
         # ========== 第四步：生成报告 ==========
         print("\n[第四步] 生成报告")
         monitor.start_step('报告生成')
-
-        # 报告目录在任务目录下
-        output_dir = os.path.join(task_dir, 'reports')
-        os.makedirs(output_dir, exist_ok=True)
 
         # 准备报告数据
         report_data = self._prepare_report_data(compare_result)
@@ -494,6 +538,220 @@ class DataModelCompareV2:
         print("=" * 80)
 
         return compare_result
+
+    def _compare_value_domains_step(self, source_files, target_md_dir, temp_dir, output_dir):
+        """值域字典（代码表）比对步骤：解析两份值域字典并比较代码覆盖。
+
+        目标标准的值域字典已从 docx 转换为 markdown（在 target_md_dir 中）；
+        源标准的值域字典为 xlsx，直接解析。结果写入 value_domain_result.json
+        并生成 value_domain_report.md。
+        """
+        import glob as _glob
+        from parsers.value_domain_parser import (
+            parse_value_domains_from_md, parse_value_domains_from_xlsx,
+            parse_value_domains_from_flat_md, parse_value_domains_from_sectioned_md)
+        from matchers.value_domain_comparator import compare_value_domains
+
+        # 1) 目标标准值域字典（docx 转 MD，扁平宽表格式：# 数据元值域）
+        target_md = None
+        if target_md_dir:
+            for p in _glob.glob(os.path.join(target_md_dir, '*.md')):
+                if '值域字典' in os.path.basename(p):
+                    target_md = p
+                    break
+        # 2) 源标准值域字典：优先 source_md_dir 中的 '值域字典' MD（docx 转换，
+        #    形如『编号小节 + 代码表』），其次 source_files 中的 .xlsx（兼容旧格式）
+        source_md_dir = os.path.join(temp_dir, 'source_md')
+        source_md = None
+        if os.path.isdir(source_md_dir):
+            for p in _glob.glob(os.path.join(source_md_dir, '*.md')):
+                if '值域字典' in os.path.basename(p):
+                    source_md = p
+                    break
+        source_xlsx = None
+        for f in (source_files or []):
+            if '值域字典' in os.path.basename(f) and f.lower().endswith('.xlsx'):
+                source_xlsx = f
+                break
+
+        if not target_md or (not source_md and not source_xlsx):
+            print("  ℹ 未同时检测到目标/源 值域字典文件，跳过值域维度比对")
+            return None
+
+        def _parse_vd(path):
+            """格式无关的取值域字典解析：依次尝试 小节标题(docx) / 扁平宽表
+            (xlsx→md) / 通用MD / 原始xlsx，取首个非空结果。源/目标取值域
+            字典的格式与比对方向无关，避免『目标=扁平、源=小节』的硬编码假设。"""
+            if path and path.lower().endswith('.xlsx'):
+                d = parse_value_domains_from_xlsx(path)
+                if d:
+                    return d
+            for fn in (parse_value_domains_from_sectioned_md,
+                       parse_value_domains_from_flat_md,
+                       parse_value_domains_from_md):
+                d = fn(path)
+                if d:
+                    return d
+            return {}
+
+        print("\n[第三步·补充] 值域字典（代码表）比对")
+        td = _parse_vd(target_md)
+        sd = _parse_vd(source_md) if source_md else (_parse_vd(source_xlsx) if source_xlsx else {})
+        if not td or not sd:
+            print("  ℹ 值域字典解析为空，跳过")
+            return None
+        res = compare_value_domains(td, sd)
+
+        # 保存 JSON
+        vd_path = os.path.join(temp_dir, 'value_domain_result.json')
+        with open(vd_path, 'w', encoding='utf-8') as f:
+            json.dump(res, f, ensure_ascii=False, indent=2)
+        # 生成 Markdown 报告
+        self._generate_value_domain_report(res, os.path.join(output_dir, 'value_domain_report.md'))
+
+        s = res['summary']
+        print(f"  ✓ 目标值域 {s['target_domain_count']} 个 / 源值域 {s['source_domain_count']} 个")
+        print(f"    - 可匹配 {s['matched_count']} 个（完全覆盖 {s['fully_covered_count']} / 部分覆盖 {s['partial_covered_count']}）")
+        print(f"    - 仅目标有 {s['target_only_count']} 个 / 仅源有 {s['source_only_count']} 个")
+        print(f"    - 平均代码覆盖率 {s['avg_coverage']:.1%}")
+        print(f"  ✓ 值域比对结果：{vd_path}")
+        return res
+
+    def _generate_value_domain_report(self, res: dict, md_path: str):
+        """生成值域字典比对 Markdown 报告。"""
+        s = res['summary']
+        lines = []
+        lines.append('# 值域字典（代码表）比对报告\n')
+        lines.append('## 概要\n')
+        lines.append(f'- 目标标准值域字典：**{s["target_domain_count"]}** 个')
+        lines.append(f'- 源标准值域字典：**{s["source_domain_count"]}** 个')
+        lines.append(f'- 可匹配：**{s["matched_count"]}** 个（完全覆盖 {s["fully_covered_count"]} / 部分覆盖 {s["partial_covered_count"]}）')
+        lines.append(f'- 仅目标标准有：**{s["target_only_count"]}** 个')
+        lines.append(f'- 仅源标准有：**{s["source_only_count"]}** 个')
+        lines.append(f'- 平均代码覆盖率：**{s["avg_coverage"]:.1%}**\n')
+
+        lines.append('## 一、匹配但部分覆盖（目标代码缺失/名称冲突，需补充）\n')
+        partial = [m for m in res['matched'] if not m['fully_covered']]
+        if partial:
+            lines.append('| 目标值域 | 标准号 | 覆盖率 | 缺失代码数 | 名称冲突数 |')
+            lines.append('| --- | --- | --- | --- | --- |')
+            for m in sorted(partial, key=lambda x: x['coverage'])[:200]:
+                lines.append(
+                    f"| {m['target_name']} | {m['target_std_no']} | "
+                    f"{m['coverage']:.1%} | {len(m['missing_codes'])} | {len(m['name_conflicts'])} |")
+        else:
+            lines.append('（无）\n')
+
+        lines.append('\n## 二、仅目标标准有的值域（源标准需补充）\n')
+        if res['target_only']:
+            lines.append('| 目标值域 | 标准号 | 代码数 |')
+            lines.append('| --- | --- | --- |')
+            for m in res['target_only'][:300]:
+                lines.append(f"| {m['target_name']} | {m['target_std_no']} | {m['code_count']} |")
+        else:
+            lines.append('（无）\n')
+
+        lines.append('\n## 三、仅源标准有的值域\n')
+        if res['source_only']:
+            lines.append('| 源值域 | 标准号 | 代码数 |')
+            lines.append('| --- | --- | --- |')
+            for m in res['source_only'][:300]:
+                lines.append(f"| {m['source_name']} | {m['source_std_no']} | {m['code_count']} |")
+        else:
+            lines.append('（无）\n')
+
+        with open(md_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+        print(f"  ✓ 值域比对报告：{md_path}")
+
+    def _self_validate_step(self, compare_result, source_standard_path: str,
+                            target_standard_path: str, temp_dir: str, output_dir: str):
+        """自验证步骤：在不依赖人工的前提下，对字段比对结果做质量体检，
+        自动检测漏配（本应匹配却判为新增）与误匹配（模糊命中但核心概念不一致），
+        并产出可供人工复核/回写知识库的修复建议。
+        """
+        if not compare_result:
+            return None
+        if not os.path.exists(source_standard_path) or not os.path.exists(target_standard_path):
+            print("  ℹ 缺少源/目标标准化文档，跳过自验证")
+            return None
+
+        with open(source_standard_path, 'r', encoding='utf-8') as f:
+            source_standard = json.load(f)
+        with open(target_standard_path, 'r', encoding='utf-8') as f:
+            target_standard = json.load(f)
+
+        # self_validate 期望 dict（与 compare_result.json 结构一致），
+        # 而 compare_result 是 CompareResult 对象，这里加载落盘的 JSON 传入。
+        cr_path = os.path.join(temp_dir, 'compare_result.json')
+        if not os.path.exists(cr_path):
+            print("  ℹ 缺少 compare_result.json，跳过自验证")
+            return None
+        with open(cr_path, 'r', encoding='utf-8') as f:
+            compare_result_dict = json.load(f)
+        sv = self_validate(compare_result_dict, source_standard, target_standard)
+
+        # 保存 JSON
+        sv_path = os.path.join(temp_dir, 'self_validation_result.json')
+        with open(sv_path, 'w', encoding='utf-8') as f:
+            json.dump(sv, f, ensure_ascii=False, indent=2)
+
+        # 生成 Markdown 报告
+        self._generate_self_validation_report(sv, os.path.join(output_dir, 'self_validation_report.md'))
+
+        s = sv['summary']
+        print("\n[第三步·补充2] 自验证（漏配/误匹配体检）")
+        print(f"  ✓ 漏配候选：{s['leak_count']} 个（建议补充字段映射）")
+        print(f"  ✓ 误匹配候选：{s['suspect_count']} 个（建议人工复核）")
+        print(f"  ✓ 自验证结果：{sv_path}")
+        return sv
+
+    def _generate_self_validation_report(self, sv: dict, md_path: str):
+        """生成自验证 Markdown 报告（漏配 + 误匹配 + KB 修复建议）。"""
+        lines = []
+        lines.append('# 自验证报告（漏配 / 误匹配体检）\n')
+        s = sv['summary']
+        lines.append('## 概要\n')
+        lines.append(f'- 漏配候选（建议补充字段映射）：**{s["leak_count"]}** 个')
+        lines.append(f'- 误匹配候选（建议人工复核）：**{s["suspect_count"]}** 个')
+        lines.append('')
+        lines.append('> 说明：本体检由程序自动完成，仅给出"高可信"的可疑项，'
+                     '最终仍需人工在 compare_editable.xlsx 中确认或修正。\n')
+
+        # 一、漏配
+        lines.append('## 一、漏配候选（目标字段已存在同名源字段，但被判为新增）\n')
+        lines.append(f'> 共 {len(sv["leaks"])} 条；"候选源表数"表示该中文名在源标准中的出现次数，'
+                     '人工确认后可在 compare_editable.xlsx 中补映射，回写知识库。\n')
+        if sv['leaks']:
+            lines.append('| 目标表 | 目标字段(中文) | 建议源字段(首选) | 候选源表数 |')
+            lines.append('| --- | --- | --- | --- |')
+            for lk in sv['leaks'][:400]:
+                suggs = lk.get('suggested_source', [])
+                first = suggs[0] if suggs else {}
+                src_str = f"{first.get('table','')}.{first.get('field','')}" \
+                    if first else '—'
+                if len(suggs) > 1:
+                    src_str += f" 等{len(suggs)}个"
+                lines.append(
+                    f"| {lk.get('table','')} | {lk.get('chinese_name','')} | {src_str} | {len(suggs)} |")
+        else:
+            lines.append('（无明显漏配）\n')
+
+        # 二、误匹配
+        lines.append('\n## 二、误匹配候选（模糊命中但核心概念不一致）\n')
+        if sv['suspects']:
+            lines.append('| 目标表 | 目标字段 | 目标(中文) | 命中源字段 | 源(中文) | 匹配方式 |')
+            lines.append('| --- | --- | --- | --- | --- | --- |')
+            for su in sv['suspects'][:400]:
+                lines.append(
+                    f"| {su.get('table','')} | {su.get('target_field','')} | {su.get('target_cn','')} | "
+                    f"{su.get('source_field','')} | {su.get('source_cn','')} | {su.get('match_type','')} |")
+        else:
+            lines.append('（无明显误匹配）\n')
+
+        with open(md_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+        print(f"  ✓ 自验证报告：{md_path}")
 
     def _parse_and_standardize(self, md_files: List[str], output_path: str) -> StandardDocument:
         """解析并标准化文档"""

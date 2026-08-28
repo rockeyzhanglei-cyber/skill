@@ -7,7 +7,7 @@ DML脚本生成器
 - edsm_dataset_category：数据集分类（新增分类）
 - edsm_dataset：数据集（新增表、修改表）
 - edsm_dataset_element：数据集元素（新增字段、修改字段）
-- edsm_metadata：元数据汇总（与dataset_element一一对应，去重）
+- edsm_metadata：元数据（与dataset_element一一对应，每个元素独立生成一条，不共用、不去重）
 
 v4.0.0 更新：
 - 新增 generate_full_dml_full 函数：全量模式DML生成
@@ -285,15 +285,15 @@ def generate_metadata_dml(parse_result, standard_id, doc_name):
     """
     dml_lines = []
 
-    # metadata从dataset_element自动生成
-    # 格式：metadata_code = HDS{标准序号}{分类序号}.{数据集序号}.{字段序号}
+    # metadata从dataset_element自动生成（一对一：每个dataset_element对应一条独立的metadata）
+    # metadata_id 与 metadata_code 均等于 dataset_element 的 element_id，彻底废除"按字段名共用/去重"逻辑
     sql = f"""insert into edsm_metadata(metadata_id, namespace_id, external_id, metadata_code, metadata_name, definition, data_type, representation_format, code_system_id, allow, status, is_del, created_at)
-select a.element_id, '1', 'HDS'||lpad(d.seq_no::text, 2, '0')||lpad(c.seq_no::text, 2, '0')||'.'||lpad(b.seq_no::text, 3, '0')||'.'||lpad(a.seq_no::text, 3, '0'), a.element_code, a.element_name, a.element_name, a.data_type, a.representation_format, a.code_system_id, a.allow, 1, 0, now() from edsm_dataset_element a, edsm_dataset b, edsm_dataset_category c, edsm_data_standard d where a.dataset_id = b.dataset_id and b.category_id = c.category_id and c.standard_id = d.standard_id and d.standard_id = '{standard_id}' and not exists (select 1 from edsm_metadata where metadata_id = a.element_id);"""
+select a.element_id, '1', 'HDS'||lpad(d.seq_no::text, 2, '0')||lpad(c.seq_no::text, 2, '0')||'.'||lpad(b.seq_no::text, 3, '0')||'.'||lpad(a.seq_no::text, 3, '0'), a.element_id, a.element_name, a.element_name, a.data_type, a.representation_format, a.code_system_id, a.allow, 1, 0, now() from edsm_dataset_element a, edsm_dataset b, edsm_dataset_category c, edsm_data_standard d where a.dataset_id = b.dataset_id and b.category_id = c.category_id and c.standard_id = d.standard_id and d.standard_id = '{standard_id}' and not exists (select 1 from edsm_metadata where metadata_id = a.element_id);"""
 
     dml_lines.append(sql)
 
-    # 更新dataset_element的metadata_id关联
-    sql2 = f"""update edsm_dataset_element a set metadata_id = (select metadata_id from edsm_metadata b where a.element_code = b.metadata_code and b.namespace_id = '1' limit 1) where a.dataset_id like '{standard_id}-%' and a.metadata_id is null;"""
+    # 更新dataset_element的metadata_id关联：按 element_id 一一对应（废除按 element_code 字段名共用/串号）
+    sql2 = f"""update edsm_dataset_element a set metadata_id = (select metadata_id from edsm_metadata b where a.element_id = b.metadata_id and b.namespace_id = '1' limit 1) where a.dataset_id like '{standard_id}-%' and a.metadata_id is null;"""
     dml_lines.append(sql2)
 
     return dml_lines

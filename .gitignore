@@ -1,0 +1,23 @@
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+
+# ===== 系统 =====
+.DS_Store
+Thumbs.db
+
+# ===== 备份/临时文件 =====
+*.bak
+*.bak_*
+*.tmp
+*_tmp.py
+*_tmp/
+
+# 日志与运行产物
+*.log
+temp/
+tmp/
+
+# 知识库运行态
+*.pid

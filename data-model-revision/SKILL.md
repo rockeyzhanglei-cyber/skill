@@ -15,8 +15,14 @@ description: |
 
 metadata:
   author: 张磊
-  version: 2.0.0
-tags: [数据模型, DDL, 修订记录, 数据标准, 值域修订, Word文档, PDF提取, Flyway]
+  version: 2.1.2
+  changes:
+    - "v2.1.2: elementCode 大小写规则——跟随标准文档字段英文名（文档大写则大写、小写则小写，不做任何转换）；bms-revise-record-spec.md 相应字段说明已更新（原先『数据库列名，小写』的描述作废）"
+    - "v2.1.1: 注释规范彻底统一——废除『简式/详式二选一』，统一采用详细式字段项[代码,填报要求,数据类型,表示格式,…]（仅代码必填，无属性时只写代码，非另一套格式）；修订记录头部统一为 /* */ 块（不再有单条三行式）；SKILL 正文加『正确优先、不靠校验兜底』原则；重复校验块已删"
+    - "v2.1.0: 注释规范补『字段项详细式语法[代码,填报要求,数据类型,表示格式,…]』与『批量排版』（同表加/删多字段顿号合一行、修改字段逐行）；校验脚本 check_comment_consistency.py 新增字段项语法 + 批量排版规则；示例改用张磊真实样例（INP_DISCHARGE/TELEMED_* 等）"
+    - "v2.1.0: 新增《注释规范（DDL 与修订记录统一约束）》——四类操作（加字段/加表/修改/删除）统一变更描述模板、DDL 与修订记录注释结构、summary=头部清单逐字一致、配套一致性铁律（含物理落地差异的唯一例外）；新增 scripts/check_comment_consistency.py 自动校验（生成后必跑）；修正『新增字段统一 null』误述为『以数据模型定义为准』"
+    - "v2.0.1: 修正Flyway铁律——base_data CSV 是初始化种子、只读不可变，基础数据变更一律走修订记录（标准升级模块升级后写入基础数据表），绝不改动CSV；新增『需求号规则』（修订记录必填需求号，无则主动追问）与『两条增量流程』架构说明"
+  tags: [数据模型, DDL, 修订记录, 数据标准, 值域修订, Word文档, PDF提取, Flyway]
 keywords: 数据模型修订 改表 加字段 加表 修订需求 生成DDL 修订记录 数据标准 数据标准基础数据 值域修订 值域更新
 ---
 
@@ -31,6 +37,58 @@ keywords: 数据模型修订 改表 加字段 加表 修订需求 生成DDL 修�
 
 ### 场景B：标准比对修订（省平台对接）
 将区域标准规范与省平台标准规范进行比对，按"只增不减不更名"原则修订。详见"标准比对修订"章节。
+
+---
+
+## 绝对规则：Flyway 增量脚本（禁止修改历史）
+
+所有标准修订产出的脚本**必须**是**增量脚本**，**严禁修改任何已经提交/执行过的历史脚本**。这是 Flyway 的硬性约束——历史版本号一旦执行就会记录在 `flyway_schema_history`，回改历史文件会导致校验失败、Flyway 无法正常执行。
+
+- **DDL 脚本**（`edsm_sql/{库类型}/` 下的 `V{YYYYMMDDHHMMSS}__*.sql`）：每次变更生成**新的**版本化文件，**绝不**回改已有文件。
+- **修订记录脚本**（`system_sql/rhdp_app/postgresql/` 下的 `V*__insert_revise_record_*.sql`）：同理，新增版本号文件，不改动已存在的修订记录脚本。
+- **数据标准基础数据 CSV（`base_data/*__*.csv`）＝初始化种子，只读、不可变**：
+  - 这些 CSV 仅在**系统初始化**时由 `BaseDataInitServiceImpl` 一次性灌入基础数据表（`edsm_dataset_element` / `edsm_metadata` / …），**之后迭代更新绝不动它，也不追加增量 CSV**。
+  - 初始化之后的**基础数据变更**（新增/修改数据集元素、元数据、值域等）→ 一律走**修订记录**流程（见下方"修订记录脚本"），由"标准升级模块"将修订记录升级后写入基础数据表。**不要**通过改 CSV 或新建增量 CSV 来表达基础数据变更。
+- **修订记录脚本（`system_sql/rhdp_app/postgresql/` 下的 `V*__insert_revise_record_*.sql`）＝基础数据增量的唯一正确载体**：
+  - 每次基础数据变更生成**新的**版本化 INSERT 脚本（不改动已存在的修订记录脚本），向 `edsm_revise_record` + `edsm_revise_detail` 插入记录。
+  - 在系统"标准升级模块"执行"升级修订记录"时，`DataStandardReviseServiceImpl` 解析 `revise_detail.revise_after` JSON 并 **INSERT/UPDATE 到对应的基础数据表**（如 `edsm_dataset_element`），完成基础数据的增量更新。**需求号必填**（见下方"需求号规则"）。
+- **基础数据同步脚本（`system_sql/rhdp_dw/greenplum/` 的 DML）**：新增同步逻辑用**新的增量脚本**表达，不回改原始文件。
+- **参考同目录既有脚本**：生成/增加新脚本（`V*.sql`、DML）前，先 `Read` 同目录下已有的同类脚本，复制其**命名风格、SQL 写法与内容约定**（如 `comment on column ... is '...'` 写法、`base_data/*.csv` 的列顺序与表头）；但**注释头统一用 `bms-script-spec.md`《注释规范》的 `/* */` 块格式，不套用旧脚本里的 `-- 集合:` / `-- 需求:` 头注释**，避免与既有历史脚本的格式混用。
+- 任何情况下都**不允许**为"图省事"去编辑历史 `V` 文件或原始 CSV。若历史脚本有问题，应**新增一个修复脚本**（版本号更新的新文件）来纠正，而不是改历史文件。
+
+> 详见 `references/bms-script-spec.md`。
+
+---
+
+## 需求号规则（每条修订记录必须携带）
+
+生成/编写 **修订记录脚本**（`system_sql/rhdp_app/postgresql/V*__insert_revise_record_*.sql`）时，`edsm_revise_record.require_no`（以及文件名中的 `{需求号}`）**必须**填写真实的**需求号**（如 `234683`），不得留空，也不得用一句描述性文字（如"数据标准修订-增加记录状态字段"）代替。脚本头部**不写** `-- 需求:` 注释行。
+
+- 用户在对话中给出的需求号直接使用；本系统修订通常都带需求号。
+- **主动追问（硬性纪律）**：如果在生成修订记录时发现**没有需求号**，**必须主动询问用户**要需求号，不要自行编造、不要跳过、不要拿描述性文字顶替。缺需求号会导致修订记录在"标准升级模块"里无法与需求关联、无法追溯。
+- 需求号是本系统修订追溯的主键之一。
+
+> 已记录的需求号（非穷举，供参考）：`234683`（STATUS 记录状态字段修订，CVA-0166）。
+
+---
+
+## 数据标准修订的两条增量流程（核心架构）
+
+本系统的标准修订有两条彼此独立的增量通道，生成脚本前必须先判断变更属于哪一类：
+
+### 流程一：基础数据变更（数据集元素 / 元数据 / 值域等）→ 修订记录
+1. **初始化**：基础数据由 `base_data/*__*.csv` 在系统初始化时一次性灌入（种子数据，**之后不再动**）。
+2. **迭代变更**：要新增/修改基础数据 → 写 `system_sql/rhdp_app/postgresql/V*__insert_revise_record_*.sql`，向 `edsm_revise_record` + `edsm_revise_detail` 插入记录（`revise_detail.revise_after` 为变更后的完整 JSON，含 `elementId`/`metadataId` 等）。
+3. **升级应用**：在系统"标准升级模块"执行"升级修订记录"，`DataStandardReviseServiceImpl` 解析 `revise_after` 并 **INSERT/UPDATE 到基础数据表**（如 `edsm_dataset_element`）。
+4. **要点**：CSV 只负责"第一次"；之后所有基础数据增量都走修订记录，绝不动 CSV、也不新建增量 CSV。
+
+### 流程二：表结构变更（加字段 / 加表 / 改列）→ 增量 DDL
+1. **初始化**：建表 DDL 在 `edsm_sql/{库类型}/V{初始}__create_*.sql`（已提交，不动）。
+2. **迭代变更**：要改表结构 → 在 `edsm_sql/{库类型}/` 下新增 `V{新时间戳}__*.sql` 增量脚本（Greenplum 用 `do $$` 幂等判断列存在再 ADD；Doris 按 reg-ddl-generator v4.6.0 Doris 规范生成，裸 ALTER + 同表合并单条）。
+3. **升级应用**：由"标准升级模块"的 Flyway 对 `edsm_sql/{库类型}` 目录执行增量迁移，落到对应数据源。
+4. **要点**：表结构增量永远是新文件，绝不回改历史 `V` 文件。
+
+> **判断口诀**：**"动数据（元素/元数据/值域）走修订记录，动表结构走增量 DDL，CSV 只初始化一次。"**
 
 ---
 
@@ -509,20 +567,34 @@ REMOVE_REASON_DESCSETUP_DATE → REMOVE_REASON_DESC + SETUP_DATE
 
 ### 修订摘要格式（summary字段）
 
-**如果修订多项内容，必须分条列出，删除的字段要具体说明**：
+> **注释规范以 `references/bms-script-spec.md`《注释规范（DDL 与修订记录统一约束）》为准**。核心规则：
+> - 字段写在 `[]` 内，分量用半角逗号分隔，顺序为 `[字段代码, 填报要求, 数据类型, 表示格式, 定义, 值域, 约束, 默认值]`（仅字段代码必填，其余有值才写）；表英文名 `]` 后**不加空格**。
+> - 四类操作 + 值域：`{表}[{EN}]新增字段：…` / ` - 新增表` / `修改字段：…（旧→新）` / `删除字段：…`；值域用 `值域-{代码表}[{CVA}]新增值：…` / `值修改为：…`。
+> - **批量排版**：同表**加/删**多个字段用**顿号合一行**；**修改**字段**不得合在一行**，每个字段独立一行。
+> - **DDL 脚本与修订记录脚本的变更描述必须逐字一致**（同一份 `/* */` 清单）。
+
+**规则**：
+1. `summary` **必须等于**修订记录脚本头部 `/* */` 编号清单，多条用 `\n` 连接，单条即那一行描述。
+2. 条数与顺序、文字必须与配套 DDL 顶部清单一致。
+3. 加/删字段顿号合并；修改字段逐行。
 
 ```sql
--- 正确示例：
-'1. 新增检查检验项目目录表[BASE_INS_EXAM_ITEM]
-2. 新增值域：检查检验类别[CVA-0307]，值：1-检查、2-检验
-3. 删除MEDTECH_LIS_REPORT_RSLT表的4个字段：
-   - PLAT_INDEX_NO（平台检验项目编码）
-   - PLAT_INDEX_NAME（平台检验项目名称）
-   - RECOGN_INDEX_NO（互认项目编码）
-   - RECOGN_INDEX_NAME（互认项目名称）'
+-- 正确示例（与 DDL 顶部 /* */ 清单逐字一致）：
+'1. 出院登记信息[INP_DISCHARGE]新增字段：日间手术病例标志[DAY_OP_FLAG,O,S3,N1]\n2. 远程会诊[TELEMED_CONSULT]删除字段：流程状态[PROCESS_STATUS_CODE]\n3. 远程检验[TELEMED_LAB]修改字段：检验类别代码[LAB_CATEGORY_CODE]（值域 CVA-0199→CT04.50.001）\n4. 远程检验[TELEMED_LAB]修改字段：标本类型代码[SPECIMEN_TYPE_CODE]（值域 CVA-0200→CVA-0255）\n5. 值域-编制情况代码表[CVA-0165]新增值：6[核酸岗]、7[员额岗]\n6. 新增表：机构数据统计表[ORG_STATISTICAL]\n7. 值域-双向转诊流程状态代码[CVA-0282]值修改为：01[已提交]、02[转出审核通过]、03[转出审核驳回]、04[转入审核通过]、05[转入审核驳回]、06[已接诊]、07[已取消]'
 
 -- 错误示例：
-'新增检查检验项目目录表，删除4个字段'  -- 太模糊，不知道删了啥
+'1. 增加字段 STATUS'                              -- 缺表中文名/英文名、措辞与 DDL 漂移
+'远程检验[TELEMED_LAB]修改字段：A[..]（…）、B[..]（…）'  -- 修改字段不得用顿号合并，应每行一个
+```
+
+**正确优先（一次写对，不靠校验兜底）**：生成 DDL / 修订记录脚本时，**直接按 `references/bms-script-spec.md`《注释规范》把注释写对**——四类操作模板、字段项详细式 `[代码,填报要求,数据类型,表示格式]`、批量排版（加/删顿号合一行、修改逐行）、DDL↔修订记录逐字一致，全部在落盘前就满足。把校验脚本当成"最后一道门禁"，而不是"写错了再改"的循环。**任何情况下都不要把不合规的注释先写进去再等校验报错**。
+
+**生成后必跑校验**（门禁，不通过不得交付）：
+
+```bash
+python3 scripts/check_comment_consistency.py \
+    --ddl  edsm_sql/doris/V{ts}__xxx.sql edsm_sql/greenplum/V{ts}__xxx.sql \
+    --revise system_sql/rhdp_app/postgresql/V{ts}__insert_revise_record_{需求号}.sql
 ```
 
 ### 完整的修订记录内容
@@ -543,29 +615,28 @@ REMOVE_REASON_DESCSETUP_DATE → REMOVE_REASON_DESC + SETUP_DATE
 - 查看Word文档中新表的位置，确定前一个表的序号
 - 新表序号 = 前一个表序号 + 1
 
-### 元数据（metadata）添加规则
+### 元数据（metadata）添加规则（一对一，废除共用）
 
-**核心原则**：每个新字段都需要对应的元数据记录，datasetElement通过metadataId引用元数据
+**核心原则（绝对规则）**：每个数据集元素（datasetElement）对应**唯一一个**元数据（metadata），二者**一一对应**。
 
-**元数据去重规则**：
-- **仅以下公共字段使用公共元数据（不去重，直接引用）**：
-  - sys_soid - 系统编码
-  - org_code - 医疗机构代码
-  - org_name - 医疗机构名称
-  - status - 记录状态
-  - is_del / jlzt / scbz - 删除标志
-  - sys_created_at / created_at - 创建日期时间
-  - sys_modified_at / modified_at - 修改日期时间
+- **废除"元数据共用 / 去重"逻辑**：不再有任何"公共字段共用同一份元数据"的例外。
+- **元数据的代码（metadataCode）与数据集元素的唯一标识（element_id）保持一致**：
+  - `element_id` = `{standard_id}-{数据集代码}-{字段代码}`（如 `winning-plat-02-BASE_EMPLOYEE-STATUS`）
+  - `metadata_id` = `element_id`（元数据主键 = 元素唯一标识）
+  - `metadata_code` = `element_id`（与数据集元素唯一标识一致，便于追踪）
+  - `datasetElement.metadata_id` = 自己的 `element_id`（指向专属元数据）
+- **同一字段名出现在不同表/数据集中，各自生成独立的元数据**。例如 `winning-plat-02-BASE_DEPARTMENT-STATUS` 与 `winning-plat-02-BASE_EMPLOYEE-STATUS` 是两条**不同**的元数据，互不共享。
+- **管理优势**：元数据 ID 直接由元素唯一标识推导得出，**不再需要去历史元数据里查 ID**。
 
-- **其他字段一律添加新的元数据**，即使字段名相同也不去重
-  - 例如：item_id在收费项目目录和检查检验项目目录中含义不同，不能共用元数据
+**历史已存在的元数据**：不做任何改动，保持原样。本规则仅对**本次及以后**的新增 / 修订生效。
 
 **元数据字段结构**：
 ```json
 {
-  "metadataId": "winning-plat-01-{字段名}",
+  "metadataId": "winning-plat-02-{数据集代码}-{字段名}",
   "namespaceId": "1",
-  "metadataCode": "{字段名}",
+  "externalId": "<由 generator 按 external-id-spec.md 规则自动生成，禁止留空>",
+  "metadataCode": "winning-plat-02-{数据集代码}-{字段名}",
   "metadataName": "{中文名}",
   "definition": "{定义说明}",
   "dataType": "{数据类型}",
@@ -582,10 +653,10 @@ REMOVE_REASON_DESCSETUP_DATE → REMOVE_REASON_DESC + SETUP_DATE
 **datasetElement引用元数据**：
 ```json
 {
-  "elementId": "winning-plat-01-{表名}-{字段名}",
-  "datasetId": "winning-plat-01-{表名}",
-  "metadataId": "winning-plat-01-{字段名}",  // 引用元数据
-  "elementCode": "{字段名}",
+  "elementId": "winning-plat-02-{数据集代码}-{字段名}",
+  "datasetId": "winning-plat-02-{数据集代码}",
+  "metadataId": "winning-plat-02-{数据集代码}-{字段名}",  // 引用自己的专属元数据（= element_id）
+  "elementCode": "{字段名}",  // 与文档字段英文名大小写一致，不转换
   "elementName": "{中文名}",
   "definition": "{定义说明}",
   "isPk": 0,
@@ -604,26 +675,30 @@ REMOVE_REASON_DESCSETUP_DATE → REMOVE_REASON_DESC + SETUP_DATE
 
 ### SQL脚本格式
 
-**不需要写太多注释，直接生成即可**。参考格式：
+**注释头统一遵循 `references/bms-script-spec.md`《注释规范（DDL 与修订记录统一约束）》**：生成前先 `Read` 一条最近的同类脚本，参考其**命名风格、SQL 写法、JSON 结构**，但**注释头必须用统一的 `/* */` 编号清单**（不套用旧脚本里的 `-- 集合:` / `-- 需求:` 头注释）：
+
+**强制格式（头部 `/* */` 清单与配套 DDL 逐字一致）**：
 
 ```sql
--- 需求: {需求号}
+/*
+1. (个人)基本信息[RESIDENT_ARCHIVE]新增字段：老年人健康管理等级代码[ELDER_HEALTH_LEVEL_CODE,O,S3,N1]
+*/
 
 insert into edsm_revise_record(revise_id,standard_id,version,require_no,summary,is_standard,published_at,is_upgraded,is_del,created_at)
-values('{UUID}','{集合}','{版本号}','{需求号}','{摘要}',1,'{时间戳}',0,0,'{时间戳}');
+values('{UUID}','winning-plat-02','{版本号}','{需求号}','1. (个人)基本信息[RESIDENT_ARCHIVE]新增字段：老年人健康管理等级代码[ELDER_HEALTH_LEVEL_CODE,O,S3,N1]',1,'{时间戳}',0,0,'{时间戳}');
 
--- 新增值域（如有）
+/* (个人)基本信息[RESIDENT_ARCHIVE]新增字段：老年人健康管理等级代码[ELDER_HEALTH_LEVEL_CODE,O,S3,N1] · 元数据 */
 insert into edsm_revise_detail(...)values(...);
 
--- 新增数据集
-insert into edsm_revise_detail(...)values(...);
-
--- 新增元数据（如有）
-insert into edsm_revise_detail(...)values(...);
-
--- 新增数据集字段
+/* (个人)基本信息[RESIDENT_ARCHIVE]新增字段：老年人健康管理等级代码[ELDER_HEALTH_LEVEL_CODE,O,S3,N1] · 数据集元素 */
 insert into edsm_revise_detail(...)values(...);
 ```
+
+**要点**：
+- 头部只保留 `/* */` 编号清单，**不写** `-- 集合:` / `-- 需求:` / `-- 字段:` / `-- 说明:` 等辅助注释行；需求号仅体现于文件名与 `require_no` 列。
+- INSERT 语句必须单行、紧凑，revise_after 用单行 JSON（字段名驼峰、日期 ISO 带 T）。
+- `summary` 必须等于头部 `/* */` 清单（多条用 `\n` 连接），禁止与清单措辞或顺序不同。
+- 同目录下 DDL（`edsm_sql/`、`system_sql/rhdp_dw/greenplum/`）和 CSV（`base_data/`）脚本也遵循同样原则：**先看同目录已有文件，复制其命名风格与 SQL 写法，但注释头统一按本规范**。
 
 ---
 
@@ -855,7 +930,7 @@ src/
 | 错误 | 原因 | 修复 |
 |------|------|------|
 | 缺少元数据记录 | 只添加了datasetElement | 新字段需要同时添加metadata和datasetElement |
-| 元数据重复添加 | item_id等非公共字段被去重 | 只有sys_soid、org_code等公共字段才去重 |
+| 元数据共用/串号 | 不同表的同名字段引用了同一份元数据 | 元数据必须一对一：每个 datasetElement 用 element_id 生成专属 metadata，metadataCode=element_id，绝不按字段名共用 |
 | 数据集缺少seqNo | 数据集记录没有序号 | 必须包含seqNo，且和文档顺序一致 |
 | 修订摘要太模糊 | 只写"删除4个字段" | 必须具体列出字段名和中文名 |
 | business_id超长 | 合并行字段名太长 | 拆分后缩短 |
@@ -916,14 +991,100 @@ Cannot parse date "2026-07-07 16:58:33": while it seems to fit format 'yyyy-MM-d
 
 ---
 
+## externalId生成规则
+
+数据元标识符 `external_id` 的**完整规则、序号来源（四表 CSV 列映射）、索引文件与示例**已整理为专章：**`references/external-id-spec.md`**，以该专章为准。核心公式：
+
+```
+HDS{standard_seq:02d}{category_seq:02d}.{dataset_seq:03d}.{element_seq:03d}
+```
+
+- 生成脚本时由 `revise_record_generator.py` 的 `compute_external_id()` **自动计算填充**，**禁止留空 `""` 或手写随意值**。
+- 序号数据源为 Skill 内的 `scripts/external_id_index.json`（由 base_data 的 4 个 CSV 全量构建，覆盖全部 standard、含 winning-plat-01；bms 项目自带的 `base_data/edsm_index.json` 仅含 winning-plat-02、不完整，不可作为其唯一来源）。
+
+---
+
+## Doris DDL生成规则
+
+> **唯一来源**：Doris DDL 统一委托 **`reg-ddl-generator` Skill**（v4.6.0，`SKILL.md`《Doris 脚本生成规范》 + `references/ddl-templates.md`《Doris 模板》）生成，**本 Skill 不另立写法**。以下仅摘要核心要点，细节以 reg-ddl-generator 为准。
+
+**生成路径**：先按 PostgreSQL 方言生成 probe（`--db postgresql --case lower --no-tran-log --no-public-fields`），再用 `scripts/convert_doris.py` 自动转换。
+
+### 字符串长度 ×4 规则（用户 2026-08-28 确定）
+
+Doris 存储 UTF-8 中文，**1 个汉字 3 字节、1 个特殊字符 4 字节**；标准文档长度按【字符数】控制，脚本长度必须按【字节数】定义 → `varchar(n)`/`char(n)` 统一 **×4**（如文档 `AN..100` → `varchar(100)` → Doris `varchar(400)`）。
+
+- 由 `convert_doris.py` **转换时自动执行**，probe 阶段保持文档原始长度，**禁止提前手动 ×4**（否则变 ×16）。
+- 最大原始 4000 → 16000，未超 Doris 上限 65533（溢出场景另议）。
+- 自检：输出中所有 varchar/char 长度必须能被 4 整除（`verify_sql.py --db doris` 强制检查）。
+
+### 语法差异（GP → Doris，由转换器处理）
+
+| Greenplum | Doris |
+|-----------|-------|
+| `do $$ ... end $$;` | 展开为裸 SQL（不再用存储过程 / DELIMITER 写法） |
+| `ALTER TABLE ADD COLUMN IF NOT EXISTS` | 不写 if exists，直接裸 `alter table t add column c type null comment '...';` |
+| `COMMENT ON COLUMN ... IS ...` | 合并进 `alter table` / `create table` 的 `comment '...'` |
+| `TIMESTAMP` | `DATETIME` |
+| `INTEGER` | `INT` |
+| `NUMERIC(p,s)` | `DECIMAL(p,s)`（Doris 无 NUMERIC，原样透传报解析错误） |
+| 无DISTRIBUTED BY | `DISTRIBUTED BY HASH(首主键列) BUCKETS 8`（**固定 8**，用户 2026-08-27 确定） |
+| 无PROPERTIES | **不输出** `PROPERTIES ("replication_num" / "replication_allocation" ...)`（用户明确去除） |
+
+**同表合并（重要）**：同一张表的多个字段变更必须合并为**单条** ALTER 语句，多子句逗号分隔、分号在末条、缩进 4 空格；Doris 不允许同一张表分多条 ALTER。
+
+**示例（转换后）**：
+
+```sql
+-- 表名中文[表名]新增字段：字段A中文[FIELD_A,O,S1,AN..50]、字段B中文[FIELD_B,O,N,N..10,2]
+alter table 表名
+    add column field_a varchar(200) null comment '字段A中文',   -- 文档 AN..50 → ×4
+    add column field_b decimal(10,2) null comment '字段B中文';
+```
+
+```sql
+create table if not exists 表名(
+    soid varchar(256) not null comment '系统编码',   -- 文档 AN..64 → ×4
+    name varchar(400) null comment '名称',            -- 文档 AN..100 → ×4
+    amount decimal(18,2) null comment '金额',
+    create_time datetime null comment '创建时间',      -- timestamp → datetime
+    remark text null comment '备注'                    -- 不限长度：text，不乘
+)
+unique key(soid)
+comment '表名中文'
+distributed by hash(soid) buckets 8;
+```
+
+**校验**：`verify_sql.py <输出.sql> --db doris`（查 numeric/timestamp 残留 + 字符串长度非 4 倍数）。
+
+---
+
 ## 目录结构
 
 ```
 data-model-revision/
 ├── SKILL.md ← 本文件
+├── bypass.md ← 非交互/流水线模式说明（Stage 1-8 全自动）
+├── skill-contract.md ← Skill 输入输出契约
 ├── references/
-│   ├── 6.0-spec.md ← 6.0版本详细规范
-│   └── common-errors.md ← 常见错误清单
-└── scripts/
-    └── revise_record_generator.py ← 修订记录生成脚本
+│   ├── 6.0-spec.md ← 6.0版本详细规范（business_id格式、基础数据检查逻辑）
+│   ├── bms-script-spec.md ← BMS脚本规范（Flyway增量铁律、DDL/修订记录/CSV目录约定）
+│   ├── bms-revise-record-spec.md ← 修订记录脚本规范（metadata/datasetElement一对一模板）
+│   ├── external-id-spec.md ← 数据元标识符(external_id)生成规则专章（HDS编号公式、四表序号来源、索引文件）
+│   ├── revise-record-value-set-spec.md ← 值域修订记录规范
+│   ├── revise-record-schema.md ← 修订表(edsm_revise_record/detail)结构说明
+│   ├── common-errors.md ← 常见错误清单
+│   └── semantic-match-engine.py ← 标准比对语义匹配引擎
+├── scripts/
+│   ├── revise_record_generator.py ← 修订记录生成脚本（核心，被本Skill调用）
+│   ├── check_comment_consistency.py ← 注释一致性检查（DDL↔修订记录，生成后必跑）
+│   ├── （已移除 ddl_generator.py ← 历史遗留，2026-08 归档，DDL统一委托 reg-ddl-generator）
+│   ├── submit_scripts.py ← 脚本提交辅助
+│   └── verify_word_pdf.py ← Word/PDF核对辅助
+└── templates/
+    └── model-revision.yaml ← 流水线配置模板
 ```
+
+> ⚠️ **DDL 生成入口**：本 Skill 的 DDL 脚本统一**委托 `reg-ddl-generator` Skill** 生成（见核心工作流 Stage 5）。
+> 本目录下的 `scripts/ddl_generator.py` 为历史遗留（功能与 reg-ddl-generator 重复），已于 2026-08 归档移出，不再使用。
+> 新增/修改 DDL 时，直接调用 reg-ddl-generator，不要在此手写 DDL 生成逻辑。

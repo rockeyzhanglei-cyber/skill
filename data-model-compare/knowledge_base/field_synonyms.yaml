@@ -8,7 +8,11 @@ field_synonyms:
 
   # ===== 患者标识 =====
   个人基本信息标识号:
-    synonyms: [local_id, YYDAH, 患者ID, 病案号, 档案号]
+    # 目标省平台"个人基本信息标识号"= 注册机构患者唯一索引，即源标准患者主键。
+    # 实测（V6.0 医疗服务 vs 省平台v1.4.1）：应匹配 患者唯一标识(PERSON.PERSON_ID)
+    # 或各业务表外键 患者标识(PERSON_ID)。此前混入 病案号/档案号/住院号 会在
+    # 同义层按字段序优先命中病案号（错误）；已移除，只保留患者标识族。
+    synonyms: [local_id, YYDAH, 患者ID, 患者标识, 患者唯一标识, patient_id]
   患者:
     synonyms: [病人, 病患, 人员]
   病人:
@@ -26,7 +30,9 @@ field_synonyms:
 
   # ===== 姓名 =====
   姓名:
-    synonyms: [名字, 名称, 患者姓名, 病人姓名, patient_name, name]
+    # 注意：名称 不应作为姓名的同义词——名称泛指实体名（院区名称/诊断名称/药品名称），
+    # 姓名特指个人姓名，两者概念不同。移除"名称"可避免所有含"名称"的字段误配到 FULL_NAME。
+    synonyms: [名字, 患者姓名, 病人姓名, patient_name, name]
     standard_codes: [XM]
     description: "患者姓名"
   患者姓名:
@@ -103,7 +109,7 @@ field_synonyms:
 
   # ===== 机构相关 =====
   机构:
-    synonyms: [医院, 单位, 医疗机构]
+    synonyms: [医院, 医疗机构]
   医院:
     synonyms: [机构, 医疗机构, 医疗单位]
   医疗机构:
@@ -157,7 +163,7 @@ field_synonyms:
   就诊:
     synonyms: [看病, 诊疗, 诊治]
   就诊流水号:
-    synonyms: [就诊ID, 流水号, 就诊编号, 就诊序号, visit_id]
+    synonyms: [就诊ID, 就诊编号, 就诊序号, visit_id]
     standard_codes: [JZLSH]
     description: "就诊记录的唯一标识"
   就诊日期:
@@ -338,3 +344,22 @@ field_synonyms:
     synonyms: [说明, 注释, 描述]
   说明:
     synonyms: [备注, 描述]
+
+  # ===== 系统审计时间字段（人工确认同义，V6.0医疗服务 vs 省平台v1.4.1医疗部分）=====
+  # 目标省平台 m_patient 将系统级审计字段拍平到主表；源标准 PERSON 等主表以
+  # SYS_CREATED_AT(创建日期时间) / SYS_MODIFIED_AT(修改日期时间) 表达同一含义。
+  # 业务侧"业务数据产生/更新日期时间" == 源侧"创建/修改日期时间"，人工确认是同一个意思，
+  # 故显式登记为同义，跳过核心概念闸门（"产生/创建"核心词不同会误拒）。
+  # 匹配应落在主表 PERSON，而非地址子表 PERSON_ADDRESS 的 SYS_ 字段。
+  业务数据产生日期时间:
+    synonyms: [创建日期时间, 数据创建时间]
+    description: "人工确认同义：目标省平台 m_patient.业务数据产生日期时间 = 源标准 PERSON.SYS_CREATED_AT(创建日期时间)，主表级审计字段"
+  业务数据更新日期时间:
+    synonyms: [修改日期时间, 数据修改时间]
+    description: "人工确认同义：目标省平台 m_patient.业务数据更新日期时间 = 源标准 PERSON.SYS_MODIFIED_AT(修改日期时间)，主表级审计字段"
+  创建日期时间:
+    synonyms: [业务数据产生日期时间, 数据创建时间]
+    description: "人工确认同义（反向）：源标准 PERSON.SYS_CREATED_AT(创建日期时间) = 目标省平台 m_patient.业务数据产生日期时间"
+  修改日期时间:
+    synonyms: [业务数据更新日期时间, 数据修改时间]
+    description: "人工确认同义（反向）：源标准 PERSON.SYS_MODIFIED_AT(修改日期时间) = 目标省平台 m_patient.业务数据更新日期时间"

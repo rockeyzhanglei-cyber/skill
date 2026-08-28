@@ -192,10 +192,10 @@
 - **规则**：更新SKILL.md中的脚本调用指令前，必须先读取脚本的argparse部分，确认实际支持的参数名和必填/可选性。不要凭文件名或注释猜测参数
 
 ### 错误35：脚本依赖的文件未在流程中显式生成
-- **现象**：`self_check.py` 需要读取 `table_scope.json`，但流程步骤中没有任何地方说明要创建这个文件，导致脚本运行时报FileNotFoundError
+- **现象**：`self_check.py` 原先需要读取 `table_scope.json`，但流程步骤中没有任何地方说明要创建这个文件，导致脚本运行时报FileNotFoundError
 - **根因**：脚本开发时假设表范围信息已存在，但流程设计时没有显式添加生成步骤
-- **修复**：在SKILL.md子流程A3中添加明确步骤："生成table_scope.json文件，包含base_tables数组"
-- **规则**：如果固化脚本需要读取某个输入文件，流程中必须有显式的"生成该文件"步骤。检查方法：grep脚本中的open()和load操作，确认每个依赖文件都有对应的生成步骤
+- **修复**：已改为统一使用 `--md` 参数从 `table_structure.md` / `tables_list.md` 读取表清单，不再依赖 `table_scope.json`。所有DDL生成脚本（`generate_oracle_ddl.py`、`generate_sqlserver_ddl.py`）也已改为使用 `--md` 参数
+- **规则**：固化脚本需要的输入文件必须在流程中有显式的生成步骤。优先使用 `--md` 参数从已有的MD文件读取表清单，避免引入额外的中间文件
 
 ### 错误36：类型映射与实际用户偏好不符
 - **现象**：`type_mapping.md` 中 Oracle VARCHAR2 映射到 SQL Server NVARCHAR，但用户明确偏好VARCHAR（因为Collation已支持中文）
@@ -272,3 +272,47 @@
 - **根因**：该脚本是最早编写的，当时还在用GBK编码，后来统一UTF-8时漏改了这个函数
 - **修复**：将 `read_csv()` 改为 `encoding='utf-8'`，删除GBK回退链。argparse `--encoding` 默认值也改为 `utf-8`
 - **规则**：grep所有脚本的 `read_csv` 函数签名和argparse默认值，确认编码参数完全一致。不能只看函数体内部，还要看argparse的 `default=` 值
+
+### 错误46：compare_with_docx.py的doc_type_to_db函数无法解析多种表示格式（致命）
+- **现象**：文档中 `S2+N1`、`S2+D10`、`S3+DT19`、`S1+A{10}` 等组合无法正确提取长度，导致新增字段类型定义不完整（缺少长度），长度比对也无法检测不足
+- **根因**：`doc_type_to_db()` 函数只实现了 `AN..n`、`N..n`、`N{n}` 三种正则匹配，缺少 `A{n}` 和 `[NDT]+{n}`（如 D10、DT19、N1、N2）格式的解析
+- **修复**：补充正则 `r'[NDT]+(\d+)'` 和 `r'A\{(\d+)\}'`，放在 `N{n}` 匹配之后
+- **验证**：用测试用例确认全覆盖：S1+AN..64, S2+N1, S2+D10, S3+DT19, S1+A{10}, N+N{10,2}
+
+### 错误47：compare_with_docx.py的SQL语法混用方括号（致命）
+- **现象**：生成的修复SQL全部使用 `[{table_name}]` 方括号引用标识符，但这是SQL Server语法。Oracle要求使用 `"{table_name}"` 双引号
+- **根因**：脚本编写时只测试了SQL Server场景，没有考虑Oracle的标识符引用差异
+- **修复**：添加 `_quote_identifier(name, db_type)` 函数，根据数据库类型动态选择引用方式。Oracle用双引号，SQL Server用方括号
+- **规则**：生成SQL时必须根据 `db_type` 参数选择正确的标识符引用语法，不能硬编码
+
+### 错误48：word_parsing_guide.md 的完整模式输出格式与 compare_with_docx.py 解析器不兼容（致命）
+- **现象**：`word_parsing_guide.md` 完整模式示例输出 `### 表1：医护人员信息表[JBYHRYXXB]`（三级标题+中文名在前+方括号），但 `compare_with_docx.py` 的 `parse_md_file()` 按 `## `（二级标题）分割章节、按"英文表名在前"匹配表头。按指南示例生成的 MD 实测解析出 **0 张表**（表清单章节也被 `## ` 分割逻辑吞掉）
+- **根因**：指南编写时未对照 `compare_with_docx.py` 的 `parse_md_file()` 实际实现，也未对照 `table_structure_template.md` 的固定格式
+- **修复**：统一完整模式输出为 `## 表N：英文表名（中文名）`（二级标题、英文表名在前），与 `table_structure_template.md` 完全一致；同时在指南中显式注明"必须与模板一致，下游脚本按 `## ` 分割"
+- **验证**：用临时文件实测 `parse_md_file()` 对两种标题级别的解析（三级标题→0表，二级标题→1表）
+- **规则**：修改解析指南中的输出示例前，必须用临时文件实测下游脚本的解析器，确认格式兼容。格式化文档（MD/CSV）的示例与解析器是强耦合，一处改动必须两端同步验证
+
+### 错误49：compare_db_to_db.py 的字段比对使用 elif 链导致差异漏报
+- **现象**：同一字段同时存在类型不一致+可空性不一致+默认值不一致时，只报告先命中的1-2类差异，其余被 `elif` 短路跳过
+- **根因**：`compare_tables()` 中 3a/3b/3c/3d 用 `if/elif` 链，而 `compare_rules_db_to_db.md` 定义的是独立比对维度
+- **修复**：改为独立 `if` 判断，四类差异全部独立报告
+- **验证**：模拟同字段4类差异，修复后全部4项都被报告
+- **规则**：多维度比对必须用独立if而非elif链，否则先命中的维度会掩盖后续维度
+
+### 错误50：compare_with_docx.py 输出缺少统计行，且默认文件名带时间戳与SKILL.md描述不符
+- **现象**：SKILL.md B6 写"脚本末尾附统计行：不安全=N, 安全=N"，实际脚本不输出；SKILL.md写"生成fix_<db_type>.sql"，实际默认输出 `fix_<db_type>_<时间戳>.sql`
+- **根因**：SKILL.md描述凭记忆编写，未对照脚本main()的实际输出逻辑
+- **修复**：脚本补上统计行输出；SKILL.md B6 文件名描述改为 `fix_<db_type>_<时间戳>.sql`（可传 `--output` 固定文件名）
+- **规则**：描述脚本行为的文字（输出文件、统计行）必须先读脚本main()确认，与错误31/34同源
+
+### 错误51：scripts/ 目录残留违反错误26规则的一次性解析脚本（死代码）
+- **现象**：`scripts/extract_tables_from_docx.py` 是早期为特定文档编写的解析脚本，输出JSON格式，与流程需要的 `tables_list.md`（MD格式）不符，未被SKILL.md任何步骤引用
+- **根因**：违反错误26规则（"一次性解析脚本只写在任务目录，不固化到scripts/"），删除文件时未清理
+- **修复**：删除该脚本。scripts/ 目录只保留流程实际引用的6个固化脚本+2个SQL模板
+- **规则**：scripts/ 目录文件必须能被SKILL.md流程步骤显式引用。定期用 `grep -rn "脚本名" SKILL.md references/` 检查，无引用的脚本一律删除或移出
+
+### 错误52：compare_db_to_db.py 的 --tables-scope 不扩展 _TRAN/_LOG，与其它脚本行为不一致
+- **现象**：`--tables-scope` 从表清单MD只提取基础表名，不扩展 `_TRAN/_LOG`，导致多库比对时仅对比原表、漏掉衍生表；而 `generate_export_sql.py` 等脚本的 `expand_tables_with_suffix()` 都会扩展
+- **根因**：各脚本独立实现表清单解析，扩展逻辑没有统一
+- **修复**：`load_table_scope()` 提取基础表名后自动扩展 `_TRAN/_LOG` 后缀
+- **规则**：所有从表清单MD提取表名的脚本，必须统一执行"基础表 + _TRAN + _LOG"扩展，扩展逻辑以 `generate_export_sql.py` 的 `expand_tables_with_suffix()` 为准

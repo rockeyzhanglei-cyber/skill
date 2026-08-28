@@ -87,7 +87,11 @@ def build_column_def(row, db_type):
 
 
 def load_table_scope(scope_path):
-    """加载表范围限制"""
+    """加载表范围限制
+
+    从表清单MD文件中提取基础表名，并扩展为包含 _TRAN/_LOG 的完整列表
+    （与 generate_export_sql.py 的 expand_tables_with_suffix 行为保持一致）。
+    """
     if not scope_path or not Path(scope_path).exists():
         return None
     
@@ -97,7 +101,14 @@ def load_table_scope(scope_path):
     # 从MD文件中提取表名
     pattern = r'^\|\s*\d+\s*\|\s*[^|]+\s*\|\s*([A-Z][A-Z0-9_]+)\s*\|'
     matches = re.findall(pattern, content, re.MULTILINE)
-    return set(matches)
+    
+    # 扩展为包含 _TRAN/_LOG 的完整列表
+    result = set()
+    for name in matches:
+        result.add(name)
+        result.add(f"{name}_TRAN")
+        result.add(f"{name}_LOG")
+    return result
 
 
 # ============================================================
@@ -161,7 +172,8 @@ def compare_tables(base_columns, target_columns, table_name, target_db_type):
             })
         
         # 3b. 长度/精度不足
-        elif base_def['length'] > target_def['length'] or \
+        # 注意：使用独立if而非elif，避免类型/长度问题掩盖可空性和默认值差异
+        if base_def['length'] > target_def['length'] or \
              (base_def['precision'] and target_def['precision'] and base_def['precision'] > target_def['precision']):
             issues.append({
                 'type': 'length_insufficient',
@@ -174,7 +186,7 @@ def compare_tables(base_columns, target_columns, table_name, target_db_type):
             })
         
         # 3c. 可空性不一致
-        elif base_def['nullable'] != target_def['nullable']:
+        if base_def['nullable'] != target_def['nullable']:
             issues.append({
                 'type': 'nullable_mismatch',
                 'table': table_name,
@@ -186,7 +198,7 @@ def compare_tables(base_columns, target_columns, table_name, target_db_type):
             })
         
         # 3d. 默认值不一致
-        elif base_def['default'] != target_def['default'] and (base_def['default'] or target_def['default']):
+        if base_def['default'] != target_def['default'] and (base_def['default'] or target_def['default']):
             issues.append({
                 'type': 'default_mismatch',
                 'table': table_name,

@@ -6,19 +6,19 @@
 适用版本：SQL Server 2012及以上（DDL语法通用）
 
 用法：
-    python generate_sqlserver_ddl.py --csv <csv_path> --mode rebuild --output <output_path>
-    python generate_sqlserver_ddl.py --csv <csv_path> --mode fix --output <output_path>
+    python generate_sqlserver_ddl.py --csv <csv_path> --md <md_path> --mode rebuild --output <output_path>
+    python generate_sqlserver_ddl.py --csv <csv_path> --md <md_path> --mode fix --output <output_path>
 
 参数：
     --csv      基准库导出的CSV文件路径
+    --md       table_structure.md文件路径（用于读取表清单和主键定义）
     --mode     模式：rebuild（重建）或 fix（修复）
     --output   输出SQL文件路径
     --encoding CSV编码（默认utf-8）
-    --doc      table_structure.md 文档路径（可选，用于读取主键定义）
+    --doc      主键定义文档路径（可选，默认使用--md）
 """
 
 import csv
-import json
 import sys
 import argparse
 import re
@@ -37,13 +37,50 @@ def read_csv(csv_path, encoding='utf-8'):
         return rows
 
 
-def load_table_scope(task_dir):
-    """加载表范围"""
-    scope_path = Path(task_dir) / 'table_scope.json'
-    if scope_path.exists():
-        with open(scope_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return None
+def extract_table_list_from_md(md_path: str) -> list:
+    """从 table_structure.md 提取表清单。
+    解析"## 表清单"章节中的表格，提取"英文表名"列。
+    """
+    with open(md_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    pattern = r'^##\s+表清单\s*\n(.*?)(?=^##\s|^---|\Z)'
+    match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+    
+    if not match:
+        print("错误：未找到'## 表清单'章节", file=sys.stderr)
+        sys.exit(1)
+    
+    table_section = match.group(1)
+    
+    tables = []
+    for line in table_section.strip().split('\n'):
+        line = line.strip()
+        if not line or not line.startswith('|'):
+            continue
+        if re.match(r'^\|[\s\-:|]+\|$', line):
+            continue
+        if '英文表名' in line or '表名' in line:
+            continue
+        
+        cells = [c.strip() for c in line.split('|')[1:-1]]
+        
+        if len(cells) >= 3:
+            table_name = cells[2].strip()
+            if table_name and re.match(r'^[A-Z][A-Z0-9_]*$', table_name):
+                tables.append(table_name)
+    
+    return tables
+
+
+def expand_tables_with_suffix(base_tables: list) -> list:
+    """将基础表名扩展为包含 _TRAN 和 _LOG 后缀的完整列表。"""
+    all_tables = set()
+    for table in base_tables:
+        all_tables.add(table)
+        all_tables.add(f"{table}_TRAN")
+        all_tables.add(f"{table}_LOG")
+    return sorted(all_tables)
 
 
 def parse_pk_from_docx(docx_path):
@@ -271,7 +308,7 @@ def group_tables(table_names):
     return result
 
 
-def generate_rebuild_script(rows, table_scope=None, pk_map=None):
+def generate_rebuild_script(rows, all_tables=None, pk_map=None):
     """生成重建DDL脚本（DROP + CREATE）"""
     
     if pk_map is None:
@@ -333,8 +370,7 @@ def generate_rebuild_script(rows, table_scope=None, pk_map=None):
             tables[table_name]['pk_constraint'] = pk_constraint
     
     # 确定表列表
-    if table_scope:
-        all_tables = table_scope.get('all_tables', [])
+    if all_tables:
         ordered_table_names = [t for t in all_tables if t in tables]
     else:
         ordered_table_names = sorted(tables.keys())
@@ -411,7 +447,7 @@ def generate_rebuild_script(rows, table_scope=None, pk_map=None):
     return "\n".join(lines)
 
 
-def generate_fix_script(rows, table_scope=None):
+def generate_fix_script(rows, base_tables=None):
     """生成修复DDL脚本（ALTER TABLE ADD/MODIFY）"""
     
     # 按表组织数据
@@ -445,9 +481,7 @@ def generate_fix_script(rows, table_scope=None):
             })
             tables[table_name]['pk_constraint'] = pk_constraint
     # 确定原表列表
-    if table_scope:
-        base_tables = table_scope.get('base_tables', [])
-    else:
+    if not base_tables:
         base_tables = [t for t in tables.keys() if not t.endswith('_TRAN') and not t.endswith('_LOG')]
     
     lines = []
@@ -503,34 +537,36 @@ def main():
     parser.add_argument('--csv', required=True, help='CSV文件路径')
     parser.add_argument('--mode', required=True, choices=['rebuild', 'fix'], help='模式: rebuild或fix')
     parser.add_argument('--output', required=True, help='输出SQL文件路径')
-    parser.add_argument('--task-dir', help='任务目录路径（用于读取table_scope.json）')
+    parser.add_argument('--md', help='table_structure.md文件路径（用于读取表清单和主键定义）')
     parser.add_argument('--encoding', default='utf-8', help='CSV编码（默认utf-8）')
-    parser.add_argument('--doc', help='table_structure.md文档路径（用于读取主键定义）')
+    parser.add_argument('--doc', help='主键定义文档路径（可选，默认使用--md）')
     args = parser.parse_args()
     
     # 读取CSV
     rows = read_csv(args.csv, args.encoding)
     print(f"✓ 读取CSV: {len(rows)} 行")
     
-    # 解析table_structure.md获取主键定义
+    # 解析主键定义：优先使用--doc，否则使用--md
     pk_map = {}
-    if args.doc:
-        pk_map = parse_pk_from_docx(args.doc)
+    doc_path = args.doc or args.md
+    if doc_path:
+        pk_map = parse_pk_from_docx(doc_path)
         if pk_map:
             print(f"✓ 从文档解析主键: {len(pk_map)} 张表有主键定义")
     
-    # 加载表范围
-    table_scope = None
-    if args.task_dir:
-        table_scope = load_table_scope(args.task_dir)
-        if table_scope:
-            print(f"✓ 加载表范围: {len(table_scope.get('base_tables', []))} 张原表")
+    # 从--md提取表清单
+    all_tables = None
+    base_tables = None
+    if args.md:
+        base_tables = extract_table_list_from_md(args.md)
+        all_tables = expand_tables_with_suffix(base_tables)
+        print(f"✓ 从MD提取表清单: {len(base_tables)} 张原表, {len(all_tables)} 张表(含TRAN/LOG)")
     
     # 生成脚本
     if args.mode == 'rebuild':
-        sql = generate_rebuild_script(rows, table_scope, pk_map)
+        sql = generate_rebuild_script(rows, all_tables, pk_map)
     else:
-        sql = generate_fix_script(rows, table_scope)
+        sql = generate_fix_script(rows, base_tables)
     
     # 写入文件
     output_path = Path(args.output)

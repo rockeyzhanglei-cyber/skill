@@ -241,3 +241,19 @@ compatibility_rules:
         source_not_has_any: ['修改标志', '修改标识', 'XGBZ', '状态', '标志']
     action: reject
     note: "需要额外检查 target_field.name 是否在控制字段列表中"
+
+  # ===== 收费分类 vs 收费票据分类 =====
+  # 来源：区域平台60 vs 云南v1.4.1 比对结果人工复核（2026-08-13）
+  charge_category_vs_receipt_category:
+    priority: 77
+    enabled: true
+    type: keyword_check
+    description: "收费分类 ≠ 收费票据分类：前者是收费项目的业务类别，后者是财务票据的类型"
+    conditions:
+      - target_has_any: ['收费分类', '收费类别', '收费项目分类']
+        target_not_has_any: ['票据', '发票']
+        source_has_any: ['票据分类', '票据类别', '发票分类', '发票类别']
+      - target_has_any: ['票据分类', '票据类别', '发票分类', '发票类别']
+        source_has_any: ['收费分类', '收费类别', '收费项目分类']
+        source_not_has_any: ['票据', '发票']
+    action: reject

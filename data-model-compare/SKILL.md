@@ -23,7 +23,7 @@ description: |
   **不要触发**（由其他Skill处理）：
   - 单纯的数据模型修订（无目标标准比对）→ 使用 data-model-revision
   - 生成DDL（无比对需求）→ 使用 reg-ddl-generator
-version: 1.3.0
+version: 1.4.0
 author: WinAi
 tags: [数据标准, 模型比对, 数据迁移, 值域修订]
 keywords: 数据模型比对 标准比对 数据标准比对 模型比对 对比两个标准 对照两份标准 比对这个文档 值域比对 代码表比对 无损传输 标准迁移 标准升级 版本差异 两份标准 两个标准 比对报告 diff两个标准 标准差异分析 标准覆盖 值域修订 自验证 核验比对结果
@@ -63,8 +63,11 @@ python3 ~/.cache/WinCode/skill/data-model-compare/main.py \
 1. 格式转换（Word/Excel/PDF → MD）
 2. 标准化解析（提取表结构、字段、值域 → JSON）
 3. 比对（字段匹配 + 约束检查 + 值域覆盖）
-4. 生成报告（MD + HTML）
-5. 生成可编辑的Excel文件（用于人工核对）
+4. 两个独立维度的补充比对：
+   - 值域字典（代码表）比对：解析双方向域字典，按标准号/规范化名称配对，计算代码覆盖率（完全覆盖/部分覆盖/仅目标有/仅源有），输出 `value_domain_report.md`
+   - 自验证（漏配/误匹配体检）：无需人工触发，自动检测"本应匹配却判为新增"的漏配候选（同名源字段，建议补映射）与"模糊命中但核心概念不一致"的误匹配候选（建议人工复核），输出 `self_validation_report.md`，驱动知识库"越积越准"
+5. 生成报告（MD + HTML）
+6. 生成可编辑的Excel文件（用于人工核对；确认后回写知识库，P0 已实现跨表全局复用）
 
 **输出目录：** `/Users/zhanglei/data-model-compare-docs/<任务名>/reports/`
 
@@ -100,6 +103,149 @@ python3 ~/.cache/WinCode/skill/data-model-compare/main.py \
 3. **长度保护**：原标准字段长度 ≥ 目标标准字段长度
 4. **值域覆盖**：原标准值域必须覆盖目标标准，只能扩充，不能修改已有值
 5. **只增不减**：不删除、不重命名原标准已有字段
+6. **人工确认不被静默否决**：知识库里的正向映射是人工领域判断，人是权威。
+   匹配期只能"检测并登记可疑"，不能用启发式规则悄悄推翻它（详见下节）。
+
+## 知识库结论的可复用性边界（重要）
+
+`knowledge_base/user_custom_mappings.yaml` 的 `created_from` 记录了这批人工确认
+是在**哪一对标准**上做出的。换标准后，两类结论的可复用性完全不同：
+
+| 结论类型 | 例子 | 换源标准后 | 处理策略 |
+|---|---|---|---|
+| **否定结论**（确认"无对应源字段"=新增） | 麻醉分级代码 → 新增 | **不可复用**。新源标准里可能确实有该字段 | 事实优先/弱否决，**三级事实检查**：①精确名 → ②fuzzy 基名 → ③语义基名（`_global_semantic_lookup`，前缀型如 `患者电子邮件地址←电子邮件地址` 只有语义基名一致时才能撤销）。任一命中且说明兼容即撤销确认，登记到 `kb_conflicts.stale_negative`。配置 `stale_negative_override_semantic`（默认 True） |
+| **正向结论**（确认"字段A对应源字段B"） | 医嘱停止医师姓名 ← 停嘱医生姓名 | **原则上可复用**（人工领域判断） | 只检测不否决，可疑项登记到 `kb_conflicts.stale_positive` |
+
+### 为什么正向映射不做静默否决
+
+实测（区域平台60 vs 云南v1.4.1，5576 字段）：给 `user_custom` 加"语义硬冲突网关"
+并直接否决后——
+
+- 只抓到 3 个真错中的 1 个；
+- 却误杀约 40 条**正确的人工确认**（`医嘱停止医师姓名←停嘱医生姓名`、
+  `人员代码←职工编码`、`身份证件类别代码←证件类型`、`居住地-邮政代码←现住址邮编`…）；
+- `new_fields` 从 3451 涨到 3471，净损失覆盖率。
+
+根因：这些"错映射"不是标准版本漂移，而是**当年人工反馈时的误点（知识库脏数据）**，
+例如 `会诊记录-会诊医师.门(急)诊号 ← 姓名`。脏数据要修在知识库里，
+而不是在匹配期靠启发式猜。因此 `user_custom_hard_gate` 默认 `False`（只登记不否决）。
+
+### 知识库体检（修脏数据的正确入口）
+
+```bash
+# 推荐：带上源标准，开启 E2 豁免，误报更低
+python scripts/kb_health_check.py --min-score 2 \
+    --source <temp_dir>/source_standard.json
+```
+
+用三类**按强度加权**的证据交叉定位脏映射（总分越高越可疑，≥2 分才报）：
+
+- **E1a 强语义冲突（2 分）**：字段种类冲突 / 核心概念缺失
+  —— 一侧是裸通用词（`姓名`、`编号`），另一侧带实质限定，是人工误点最典型形态
+  （`主治医师姓名 ← 姓名`、`责任护士代码 ← 责任护士执业证书编码`）
+- **E1b 弱语义冲突（1 分）**：核心概念不相干（双方都有限定但不搭）
+- **E2 库内自相矛盾（1 分）**：同一目标字段在库里有多条非空映射，本条落在少数簇
+  （`生产批号 → {批号, 生产批号, 批准文号}`，`批准文号` 离群）。
+  **豁免**：多数簇的源字段名在本条源表里根本不存在时，说明人工没有同名字段才退而用
+  别名，属合理，不计分（正是这一步干掉了 `就诊类型代码 ← 门诊/住院标志` 的误报）。
+- **E3 同表同名归属冲突（2 分）**：源字段 X 已归属同名目标字段 X，又给了别的目标字段
+  （`不良事件类别名称` 已给 `不良事件类别名称`，又给了 `不良事件报告医师姓名`）。
+  派生字段（子串关系）与主子表流水号继承两类正常形态予以豁免。
+
+输出 `knowledge_base/kb_health_report.json`，**按置信分层**：
+
+- **A-高置信**（大概率误点，建议直接改 yaml）：如 `第一/第二助手姓名←病人姓名`、
+  `患者姓名←性别`、`门(急)诊号←姓名`、`主治医师/住院医师姓名←姓名`、
+  `*医师代码←*执业证书编码` 等。
+- **B-待确认**（一源对多目标，多为合理派生，人工快判即可）：如 `就诊类型代码←门诊/住院标志`、
+  `严重不良事件转归代码←不良事件报告类型代码` 等。
+
+**复核后请直接改 yaml，不要改匹配规则。** 脏数据修在知识库里，比对期只检测不否决
+（见红线第 6 条）。
+
+### 本轮实测修复记录（V6.0医疗服务 vs 省平台v1.4.1医疗部分）
+
+- **知识库脏映射修正**：`会诊记录-会诊医师.门(急)诊号 ← 门诊就诊记录表.姓名` 把 `gmap['门(急)诊号']`
+  污染成 `{'source_field': '姓名'}`（gmap 后写覆盖、无源表约束），导致新表
+  `m_emr_observation_resc.门(急)诊号` 错配到"姓名"。已将该条 source_field 改空。
+  排查手法：用正则扫 gmap（target 含 号/代码/标识 + source 含 姓名/名称/性别）定位可疑。
+- **整表新增 ≠ 字段新增**：用户确认整表新增 / 无表匹配时，**仍应对每个字段走字段级跨表匹配**
+  （`_match_new_table_fields`），只把真正匹配不到的落为新增；整表直接全量落新增会
+  误吞约 132 个可回收字段（本任务 3394→3224 即此修复贡献）。
+- **"综述↔结果/结论"类命名差异**：`体检综述←总检结果`（目标说明"总检的汇总结果"）
+  被 `_user_custom_hard_conflict` 判"核心概念不相干"（公共汉字仅"检"字）——属规则引擎
+  保守误报，人工核验为同概念，保留。此类误报仅登记不否决，不影响结果；案例增多可
+  在 `field_synonyms.yaml` 增加同义对或在硬冲突判据中加 description 兜底。
+
+### 本轮会话修复记录（P6 多表关联+否定确认强判死+自验证降噪，V6.0医疗服务 vs 省平台v1.4.1医疗部分）
+
+**背景**：目标标准 `个人基本信息标识号`/`卡类型代码`/`卡号`/`社保卡号`/`出生地-详细地址`/`居住地-详细地址`
+需匹配源标准多表（PERSON 主表 + PERSON_IDENTIFICATION 子表 + PERSON_ADDRESS 子表），
+要求通道支持 FK 说明驱动的多表关联。
+
+**改动 1：P6 多表关联通道（auto_relation）——standard_comparator.py**
+- 解析源字段说明中 FK 描述（`_FK_PATTERN`）构建双向表邻接图 `_auto_adjacency`
+- 目标字段在当前对齐源表所有常规通道失败后，沿 FK 关联图搜索关联子表，是 new_field 前最后一环
+- 跨表收集 + 全局最优等级：P6 遍历全部邻接表收集候选（`defer_claim=True`），按整数 rank（0=exact < 1=synonym < 2=semantic < 3=keyword）全局取最高优先级
+- 跨通道占用保护 `_p6_occupied`：compare() 主循环登记非 P6 通道已占用的源字段，P6 决策时若候选已被占用且基名不一致则拒绝
+- 通道级专有同义词 `_AUTO_REL_SYNONYMS`：`卡类型→卡证类型`、`卡号→卡证号码`、`社保卡号→卡证号码`、`居民健康卡卡号→卡证号码`
+- 复用判定 `_auto_relation_reuse_allowed`：剥离地址位置/卡类型前缀与尾部种类词后基名一致才允许同源字段服务第二个目标字段
+
+**改动 2：P6 意图登记 `_p6_uc_declared`（防止 P6 keyword 抢配已知错名）**
+- user_custom 声明了来源但**解析失败**（表存在但字段未命中）时登记"意图"
+- P6 决策点仅拦截 `str(mtype).endswith('keyword')` 最低置信兜底，高置信 synonym/semantic 不受影响
+- 表不存在（陈旧表名如 `患者基本信息表`）不登记，降级全局跨表复用，P6 兜底仍可回收
+
+**改动 3：否定确认改造——表可解析 + fact 全 miss 时强否定判死（standard_comparator.py）**
+- 旧逻辑：否定确认（source_field 空）走 stale_negative_override 三级事实查找，miss 后不判死继续走常规通道 → 被 keyword/P6 抢配（如 `会诊所见`/`术前用药`/`补充诊断-中医病名代码` 已有否定确认条目但仍被错误匹配）
+- 新逻辑：**表可解析 + fact 三级全 miss** → 直接 `return None`（强否定判死）。fact 任一命中则不判死（如 `出生地-详细地址` 表名陈旧但 P6 能回收）
+- 类型名判断：`isinstance(sf, dict)` 表示 fact 命中（dict 态），`return None` 表示确定判死，`continue` 回到常规通道
+
+**改动 4：self_validator.py 降噪规则扩展**
+- `_NOISE_CHARS` 新增全角冒号 `：`（`其中:中医辩证论治会诊费 ↔ 其中：中医辨证论治会诊费`）
+- `_NORMALIZE_MAP` 新增：`辩证→辨证`、`结束就诊→就诊结束`、`治疗处理→治疗`、`是否是→是否`、`药品→药物`、
+  `出生地-/居住地-→地址-`、`手术申请单/电子申请单→申请单`、`手术后可能出现的意外及并发症→手术并发症`、`其中→''`
+- `_GENERIC_PREFIXES` 新增 `医疗机构`（`其中：医疗机构中药制剂费` 剥离 `医疗机构` 后与 `其中:中药制剂费` 同概念）
+- `_strip_generic` 回退安全：剥前缀后若只剩后缀词（如 `医疗机构代码`→`代码`）则回退该前缀，避免 `转入医疗机构代码 vs 医疗机构代码` 误判
+- `_GENERIC_SUFFIXES` 新增 `唯一`
+
+**修复效果（suspects 17→0，leaks 0）**：
+- 6 目标字段全部回收（`个人基本信息标识号` [user_custom]、`卡类型代码`/`卡号`/`社保卡号` [auto_relation_synonym]、`出生地-详细地址`/`居住地-详细地址` [auto_relation_keyword]）
+- 3 条真误配（`会诊所见`/`补充诊断-中医病名代码`/`术前用药`/`补充诊断-中医证候代码`）保持 new_field
+- 14 条自验证合理匹配误报通过降噪规则收敛
+- new_fields 从 3233→3064，准确率 100%
+
+### 本轮会话修复记录（round6：条件装配固化 + P6 外键方向否决，V6.0医疗服务 vs 省平台v1.4.1医疗部分）
+
+**背景**：用户点名 ① `permanent_addr_district_code`（常住地-区县代码）匹配 PERSON_ADDRESS.县（区）编码需带
+条件显示（地址类别代码=03）；② `health_rec_no`（健康档案编号）匹配 EMR_REFERRAL_RECORD.档案编号 违反外键方向
+（PERSON 主表无健康档案字段，ARCHIVE_NO 仅在转诊记录事件子表，一对多方向不成立）。
+
+**改动 1：条件装配固化——scripts/apply_conditional_constraints.py（新建）**
+- 读 `temp/conditional_constraints.json` v2 `rules`（tables + field/field_prefix + cond + value），给 matched/modified
+  注入 `condition_display`（格式 `地址类别代码[ADDRESS_TYPE_CODE]=03[家庭常住住址]`）
+- 幂等：首次备份 `iter_compare_result.json.bak_pre_cond`；重复运行覆盖同值
+- 三处挂载：fast_iterate.py（写盘后）、generate_report.py（加载时）、main.py（_save_compare_result 后回写内存）
+- **坑**：round2 曾一次性注入 46 条 condition_display 但未固化代码，round3-5 重跑后全部丢失——条件显示必须代码化
+
+**改动 2：P6 外键方向否决——standard_comparator.py `_find_matching_field` P6 决策段**
+- 候选消歧成功后：若候选表是当前源表的子表（`(rtb.name, source_table.name) in fk_child_to_parent`）且**无判别器**
+  → 登记 user_custom_conflicts（reason 标注「P6 外键方向冲突：主表[…] 反向借事件子表[…]」）并 return None
+- 属性子表（有判别器）放行——与 _accept_user_custom 的方向硬约束一致，堵住 P6 绕行口
+
+**改动 3：属性子表显式名单（关键修正，勿回退到自动检测）**
+- 新增类常量 `_AUTO_REL_ATTR_TABLE_DISCS = {PERSON_ADDRESS: (ADDRESS_TYPE_CODE, 地址类别代码),
+  PERSON_CONTACT: (CONT_TYPE_CODE, 联系方式类别代码), PERSON_IDENTIFICATION: (IDCARD_TYPE_CODE, 卡证类型代码)}`
+- `_build_auto_relations` 第二遍**只按显式名单注册**判别器（value_domains 为空也注册；方向豁免只看 key 存在）
+- **不要用自动检测**（`('类别代码' in cn or '类型代码' in cn) and f.value_domains`）：源标准 value_domains
+  常全空导致检测必然失败；且事件子表（OUTP_ENCOUNTER.就诊类型代码、MAHP_MAIN.身份证类别代码等）同样含
+  类型代码字段，放宽条件会误判属性子表放行方向否决
+- 新增「属性子表优先」：消歧命中事件子表而候选池存在显式属性子表候选时改采属性子表（如 户籍地-省市代码
+  曾被 MAHP_MAIN.户籍地址编码 keyword 抢先→否决，改采 PERSON_ADDRESS.ADDR_PROV_CODE 残基+判别器 01）
+
+**round6.2 最终效果**：new_fields 1576；condition_display 43 条（m_patient 地址/电话族全覆盖；
+permanent_addr_district_code=03、reg_*=01、birth_*=06、phone/mobile_phone ✓）；health_rec_no 落 🔴 新增；
+P6 方向冲突 60 条全为事件子表；leak 0 / suspect 47；准确率 99.16%。
 
 ## 三种工作模式
 
@@ -474,6 +620,26 @@ relations:
 - **添加新报告格式**：在 `reporters/` 下创建报告生成器，实现 `generate()` 方法
 
 ## 测试与回归防止
+
+### 快速迭代与审计工具链（优化 skill 时用这套）
+
+改完匹配逻辑不要重跑整个解析流程（慢且噪声大），按下面顺序走：
+
+| 脚本 | 作用 | 典型用法 |
+|---|---|---|
+| `scripts/fast_iterate.py` | **秒级判分**。复用已解析的 `*_standard.json` 重跑比对+自验证，打印匹配类型分布、漏配数、疑误配数、准确率 | `fast_iterate.py <temp_dir> --dump-suspects 40` |
+| `scripts/audit_new_fields.py` | 新增字段深度审计。A档=确定漏配 / B档=疑似 / C档=主子表展开 | `audit_new_fields.py <temp_dir>` |
+| `scripts/audit_matches.py` | 全量匹配**分层置信**审计。L1 中文名同 / L2 基名+种类同 / LE 英文名同源 / LD 字典派生 / L3 需复核 / L4 最可疑 | `audit_matches.py <temp_dir> --sample 12` |
+| `scripts/trace_field.py` | 单字段全链路追踪，定位某个字段为什么没匹配上 | `trace_field.py <temp_dir> <表名> <字段名>` |
+| `scripts/kb_health_check.py` | 知识库脏映射体检（E1a/E1b/E2/E3 加权分层，A=高置信误点 / B=待确认派生） | `kb_health_check.py --min-score 2 --source <temp>/source_standard.json` |
+| `scripts/audit_kb_veto.py` | 审计"知识库映射被否决"后的下游后果，防止网关误杀 | `audit_kb_veto.py <temp_dir>` |
+| `audit_user_custom_review.py`（项目 temp 下，可复用模板） | **新表路径 user_custom 回收硬冲突复核**：遍历 new_tables 中 match_type=='user_custom' 的条目，对每对 (目标,源) 调 `_user_custom_hard_conflict` 输出全部条目+可疑清单到文件 | `python <temp>/audit_user_custom_review.py <temp_dir>`（需按 SKILL_DIR 修改脚本头） |
+| `regenerate_reports.py`（项目 temp 下，可复用模板） | **跳过完整流程重新生成报告**：直接用 `iter_compare_result.json` 重出 HTML/MD/XLSX 三件套（含键名转换 modified→modified_fields），覆盖 reports/ | `python <temp>/regenerate_reports.py`（脚本内改 TEMP/OUT/TITLE） |
+
+**迭代纪律**：每次只改一个判据 → 立刻 `fast_iterate.py` → 看漏配/疑误配是否同时不劣化。
+**只看准确率会被自验证的覆盖盲区骗到**：自验证只覆盖它认识的匹配类型，
+新增匹配类型（如 `cross_table_fuzzy`）必须同步加进 `self_validator.py` 的 `fuzzy_types`，
+否则准确率虚高。分层审计（`audit_matches.py`）是自验证的交叉校验，两者都要看。
 
 ### 测试用例库
 

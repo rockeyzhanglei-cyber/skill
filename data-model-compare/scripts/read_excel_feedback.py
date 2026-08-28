@@ -524,6 +524,8 @@ def update_user_custom_mappings(changes: List[dict], task_dir: str):
             'target_field': field_cn,
             'source_table': change['new_source_table_cn'] or change['new_source_table_en'],
             'source_field': change['new_source_field_cn'] or change['new_source_field_en'],
+            'source_field_en': change['new_source_field_en'],
+            'source_field_cn': change['new_source_field_cn'],
             'original_source_table': change['original'].get('source_table_cn', ''),
             'original_source_field': change['original'].get('source_field_cn', ''),
         }

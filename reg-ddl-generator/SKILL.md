@@ -22,8 +22,18 @@ description: |
   - 可选生成edsm_*标准库同步DML
 metadata:
   author: 张磊
-  version: 4.4.3
+  version: 4.6.0
   changes:
+    - "v4.6.0: Doris 字符串长度 ×4 固化——Doris 存储 UTF-8 中文（1 汉字 3 字节 / 1 特殊字符 4 字节），标准文档长度按【字符数】控制，故转换层自动将 varchar(n)/char(n) 统一 ×4（如 varchar(100)→varchar(400)，最大 4000→16000 未超 Doris 65533 上限）。convert_doris.py 转换时自动执行（上游 PG probe 保持文档原始长度，禁止提前手动 ×4 否则变 ×16）；verify_sql.py --db doris 新增防线：残留长度非 4 倍数的 varchar/char 直接报警"
+    - "v4.5.5: verify_sql.py 新增 Doris 防线——支持 --db doris，check_doris_type_compatibility 扫描可执行代码区，若残留 numeric/timestamp 直接报警（提示转 DECIMAL/DATETIME）；/* */ 与 -- 注释先剥离，不会误报变更说明文字"
+    - "v4.5.4: Doris 转换修复——convert_doris.py 新增 to_doris_type 映射，PostgreSQL 定点数 numeric(p[,s])→decimal(p[,s])、timestamp→datetime，避免 Doris 报 'mismatched input numeric' 解析错误；Greenplum/PostgreSQL 目标库仍用 numeric（它们支持），仅 Doris 转换层改"
+    - "v4.5.3: element_code 大小写规则——跟随标准文档字段英文名（文档大写则大写、小写则小写，不做任何转换）；与 data-model-revision v2.1.2 及 bms-revise-record-spec.md 口径一致"
+    - "v4.5.2: 新增Doris脚本规范——建表 distribute by hash(x) buckets 8（不写副本数）、ALTER合并为单条多子句（参考doris/V20260729153107风格）；新增『不确定就问用户，不猜』铁律"
+    - "v4.5.1: 注释规范彻底统一——删掉 Skill 内旧的『[字段名,类型(长度),约束]』『修改属性』『字段约束修改为\"M\"』等冲突写法，统一到 data-model-revision/references/bms-script-spec.md《注释规范》唯一来源；字段项改为[代码,填报要求,数据类型,表示格式]；脚本生成规范表改为引用规范、不再重复定义；强调『一次写对，不靠校验兜底』"
+    - "v4.5.0: 注释规范补『字段项详细式语法』与『批量排版』（加/删多字段顿号合一行、修改字段逐行），DDL注释风格规范新增变更清单写法；对齐 data-model-revision 示例"
+    - "v4.5.0: 注释规范统一到 data-model-revision/references/bms-script-spec.md《注释规范》——四类操作统一变更描述模板（表英文名]后无空格）、本Skill采用详式、DDL与配套修订记录清单必须逐字一致；修正『新增字段统一null』为『默认null，数据模型明确必填带默认值时按模型定义』"
+    - "v4.4.5: 修正Flyway铁律——base_data/*__*.csv 是初始化种子、只读不可变，初始化后基础数据变更一律走修订记录（data-model-revision），绝不改动CSV；适用范围由四类收缩为三类（DDL/修订记录/同步脚本）"
+    - "v4.4.4: 元数据废除共用/去重逻辑，改为与dataset_element一一对应（metadata_id=metadata_code=element_id）；新增Flyway增量脚本铁律章节（历史脚本不可回改，全部走增量）"
     - "v4.4.3: 修订记录新增版本号格式（公版V6.0.{ts}，项目化V6.0.{project_code}.{ts}）、datasetName用中文、日期格式使用ISO标准（带T分隔符）"
     - "v4.3.8: 步骤3修正为逐个clarify（clarify不支持分组问题）；添加无红色标记时建议切换全量模式的pitfall"
     - "v4.3.7: 修复S2+N..4全角圆点解析bug（全角句点U+FF0E→英文点U+002E）；SKILL.md中选项改为一次性多选模式"
@@ -42,6 +52,23 @@ metadata:
     - "v3.1.0: Oracle DDL模板重构：参考PostgreSQL格式风格"
 ---
 ...
+
+---
+
+## Flyway 增量脚本铁律（禁止修改历史）
+
+> **绝对规则**：本工具生成的全部脚本都遵循 Flyway 版本化迁移原则——**历史脚本不可修改，所有修订必须是增量脚本**。
+
+- **只增不改**：已执行过的 `V{时间戳}__*.sql` 历史脚本不允许回改。Flyway 会校验历史文件内容（checksum），改动后执行将失败。
+- **适用范围**（以下三类目录的产物全部必须是增量，不回改原文件）：
+  1. DDL 升级脚本：`edsm_sql/{库类型}/`（greenplum/oracle/sqlserver/postgresql）—— 表结构变更走这里
+  2. 修订记录脚本：`system_sql/rhdp_app/postgresql/`
+  3. 基础数据同步脚本：`system_sql/rhdp_dw/greenplum/`
+- **基础数据 CSV（`base_data/*__*.csv`）＝初始化种子、只读不可变**：仅在系统初始化时灌入基础数据表，**之后基础数据变更（数据集元素/元数据/值域）一律走修订记录脚本（见上第2条 + data-model-revision Skill），绝不改动 CSV、也不新建增量 CSV**。本工具只生成 DDL/DML，不负责基础数据 CSV。
+- **DML 也是增量**：同步脚本同样不可回改，新增逻辑用新文件表达，不修改已提交的旧文件。
+- **历史有问题**：若历史脚本/CSV 存在错误，必须写**新的修复脚本/新文件**去修正，而非修改原文件。
+- **幂等安全**：增量脚本通过 `not exists (...)` / `where ... is null` 等条件保证重复执行安全；历史已存在的数据**不做任何改动**。
+- **参考同目录既有脚本**：生成/增加新脚本（`V*.sql`、CSV、DML）前，先 `Read` 同目录下已有的同类脚本，复制其**命名风格、SQL 写法与内容约定**（如 `comment on column ... is '...'` 写法、`base_data/*.csv` 的列顺序与表头）；但**注释头格式统一用 `data-model-revision/references/bms-script-spec.md`《注释规范》的 `/* */` 块**，不套用旧脚本里的 `-- 集合:` / `-- 需求:` 头注释。
 
 ---
 
@@ -257,9 +284,17 @@ PDF标注`必填`的字段，Word中经常被错误标为`C`（有则必填）�
 
 ## DDL注释风格规范（v4.3.2）
 
+> **统一注释规范以 `data-model-revision/references/bms-script-spec.md`《注释规范（DDL 与修订记录统一约束）》为准。**
+> 核心：四类操作（加字段/加表/修改/删除）+ 值域修订，用统一的变更描述模板 `{表中文名}[{表英文名}]{操作}：…`（**`]` 后无空格**）；字段项写在 `[]` 内、半角逗号分隔，顺序 `[字段代码, 填报要求, 数据类型, 表示格式, …]`（仅代码必填）。
+> 本 Skill 采用其中的**详式**（字段项内附类型与约束，如 `[DAY_OP_FLAG,O,S3,N1]`）；
+> **批量排版**：同表**加/删**多个字段用**顿号（、）合一行**；**修改**字段**不要合在一行**，每字段独立一行；
+> **配套铁律**：DDL 脚本与其配套的数据标准修订记录脚本，变更清单的条数、顺序、描述文字必须逐字一致，且形式（简式/详式）全程统一。
+> 生成后可跑 `data-model-revision/scripts/check_comment_consistency.py` 校验。
+
 | 规范项 | 要求 |
 |--------|------|
 | 脚本块注释 | 单行注释，如：`-- 表名中文[表名] - 新增表` |
+| 变更清单 | 顶部 `/* */` 编号列出所有变更；同表加/删多字段用顿号合一行，如 `出院登记信息[INP_DISCHARGE]新增字段：日间手术病例标志[DAY_OP_FLAG,O,S3,N1]、主管医生姓名[CHIEF_DOC_NAME,O,S3,XM]` |
 | SELECT/COMMENT语句 | **一个语句一行，不换行**（SELECT、EXECUTE IMMEDIATE COMMENT等都在同一行） |
 | CREATE TABLE语句 | **字段列表保持多行**，每个字段一行，主键约束单独一行，括号后换行 |
 | 分隔线 | **不加**分隔线（如 `-- ============`） |
@@ -311,14 +346,15 @@ end;
 | 规范项 | 要求 |
 |--------|------|
 | 文件头信息 | **不要**文件名称、数据库类型、生成时间、来源文档等，直接生成修订记录注释 |
-| 修订记录注释 | 使用 `/* ... */` 格式，列出所有变更（新增表、新增字段、修改字段） |
-| 脚本块注释 | 与修订记录内容一致，写清楚加了哪些字段：`表名中文[表名]新增字段：字段名中文[字段名,类型(长度),约束]、...` |
+| 修订记录注释 / 变更清单 | 顶部用 `/* ... */` 编号列出所有变更（新增表、新增字段、修改字段、删除字段、值域修订）。**格式、字段项写法、批量排版一律以 `data-model-revision/references/bms-script-spec.md`《注释规范》为唯一准绳**，本表不重复定义 |
+| 脚本块注释 | 与变更清单逐条一致；字段项用详细式 `表名中文[表名]新增字段：字段名中文[字段代码,填报要求,数据类型,表示格式]`，同表加/删多字段顿号合一行、修改字段逐行 |
 | 新增字段检查 | 先判断表是否存在，再判断字段是否存在 |
-| 多字段合并 | 同一张表多个字段放到**一个** begin-end 块；TRAN/LOG 也放入同一个 begin-end |
 | 大小写格式 | 选择全大写/全小写时，脚本**所有字符**都应用该格式（SQL关键字、数据类型、表名、字段名） |
 | 内容区域注释 | 内容区域**不加注释**（如"检查字段是否存在"等）；只在脚本块前写简单描述 |
-| 字段约束 | 新增字段统一使用 `null`（非必填），避免已有数据插入失败 |
+| 字段约束 | 默认 `null`（非必填），避免已有数据插入失败；**但数据模型/实体明确为必填且有默认值时按模型定义**（如标志类字段 `not null default '0'`），不得一刀切改成 null |
 | 关联表同步 | TRAN/LOG表只同步字段，不加注释；修订记录注释中不含关联表 |
+
+> **注释规范唯一来源**：本 Skill 不再另立一套注释格式。字段项语法、四类操作模板、批量排版（加/删顿号合一行、修改逐行）、DDL↔修订记录一致性，全部见 `data-model-revision/references/bms-script-spec.md`《注释规范（DDL 与修订记录统一约束）》。生成 DDL 时直接按该规范写注释，不要事后依赖校验脚本兜底。
 
 **大小写格式详细规则**：
 
@@ -349,10 +385,10 @@ end;
 **SQL Server 新增字段示例（全大写）**：
 ```sql
 /*
-表名中文[表名]新增字段：字段名中文[字段名,VARCHAR(50),应填]、字段名中文[字段名,VARCHAR(100),应填]
+表名中文[表名]新增字段：字段名中文[字段代码,应填,VARCHAR(50)]、字段名中文[字段代码,应填,VARCHAR(100)]
 */
 
--- 表名中文[表名]新增字段：字段名中文[字段名,VARCHAR(50),应填]、字段名中文[字段名,VARCHAR(100),应填]
+-- 表名中文[表名]新增字段：字段名中文[字段代码,应填,VARCHAR(50)]、字段名中文[字段代码,应填,VARCHAR(100)]
 IF EXISTS (SELECT * FROM SYS.TABLES WHERE NAME = '表名')
 BEGIN
     IF NOT EXISTS (SELECT * FROM SYS.COLUMNS WHERE OBJECT_ID = OBJECT_ID('表名') AND NAME = '字段1')
@@ -384,10 +420,10 @@ GO
 **SQL Server 新增字段示例（全小写）**：
 ```sql
 /*
-表名中文[表名]新增字段：字段名中文[字段名,varchar(50),应填]、字段名中文[字段名,varchar(100),应填]
+表名中文[表名]新增字段：字段名中文[字段代码,应填,varchar(50)]、字段名中文[字段代码,应填,varchar(100)]
 */
 
--- 表名中文[表名]新增字段：字段名中文[字段名,varchar(50),应填]、字段名中文[字段名,varchar(100),应填]
+-- 表名中文[表名]新增字段：字段名中文[字段代码,应填,varchar(50)]、字段名中文[字段代码,应填,varchar(100)]
 if exists (select * from sys.tables where name = '表名')
 begin
     if not exists (select * from sys.columns where object_id = object_id('表名') and name = '字段1')
@@ -525,40 +561,39 @@ END;
 | 说明/备注 | 内容变更 | 仅修订记录注释，不生成DDL |
 | 值域 | 内容变更 | 仅修订记录注释，不生成DDL |
 
-**修订记录格式**：
+**修订记录格式**（仅修订记录注释、不生成 DDL 的字段属性变更，同样用统一语法）：
 ```sql
-表名中文[表名]修改字段：字段名中文[字段名] - 修改属性：属性名1,属性名2
+表名中文[表名]修改字段：字段名中文[字段名]（{旧属性值}→{新属性值}）
 ```
 
 示例：
 ```sql
 /*
-患者基本信息[JB_BRJBXX]修改字段：姓名[XM] - 修改属性：约束
-门诊就诊记录[JB_MZJZJL]修改字段：诊断代码[ZDDM] - 修改属性：表示格式
-门诊就诊记录[JB_MZJZJL]修改字段：诊断名称[ZDMC] - 修改属性：说明
+患者基本信息[JB_BRJBXX]修改字段：姓名[XM]（约束 → 必填）
+门诊就诊记录[JB_MZJZJL]修改字段：诊断代码[ZDDM]（表示格式 → AN..20）
+门诊就诊记录[JB_MZJZJL]修改字段：诊断名称[ZDMC]（说明 → ICD-10 诊断名称）
 */
 ```
 
-**注意**：只修改"说明"等非DDL列时，只在修订记录注释中体现，不生成ALTER脚本。
+**注意**：只修改"说明"等非 DDL 列时，只在修订记录注释中体现（用上面的统一修改语法），不生成 ALTER 脚本。格式仍须与 `data-model-revision`《注释规范》一致。
 
 ---
 
 ## 修订记录格式
 
-v2.4.3 新格式：
+统一格式（与 `data-model-revision`《注释规范》完全一致，**这是唯一格式**）：
 ```sql
 /*
 新增表：表名中文[表名]
-表名中文[表名]新增字段：字段名中文[字段名,类型(长度),约束]、字段名中文[字段名,类型(长度),约束]
-表名中文[表名]字段名中文[字段名]字段约束修改为"M"，表示格式修改为"AN..100"，说明修改为"值域内容"
+表名中文[表名]新增字段：字段名中文[字段代码,填报要求,数据类型,表示格式]、字段名中文[字段代码,填报要求,数据类型,表示格式]
+表名中文[表名]修改字段：字段名中文[字段代码]（{旧属性值}→{新属性值}）
 */
 ```
 
-- 多个字段用顿号分隔
-- 字段名中文可省略（第二个字段开始）
-- **修订记录不含关联表（_TRAN、_LOG）**
-- **修改属性显示实际内容**：约束用M/O，表示格式用AN..100等，说明用实际值域内容
-- **约束改为M（O→M）不生成DDL**，只在修订记录注释中体现
+- 同表加/删多个字段用顿号（`、`）合一行；修改字段每个字段独立一行。
+- 每个字段必须写全「字段中文名[字段代码,…]」，不可省略。
+- **修订记录不含关联表（_TRAN、_LOG）**。
+- 约束改为 M（O→M）、或仅改"说明/值域内容"等非结构属性：**不生成 DDL**，只在修订记录注释中用统一修改语法体现（`（旧→新）`）。
 - **只有表示格式变更和约束改为O（M→O）才生成DDL脚本**
 
 ### 修订记录SQL生成要点
@@ -617,7 +652,7 @@ v2.4.3 新格式：
 | 数据集区域二级目录 | `edsm_dataset_category` | 红色字体→INSERT新增分类 |
 | 数据集表格 | `edsm_dataset` | 新增表→INSERT；修改表→DELETE+INSERT |
 | 数据集字段 | `edsm_dataset_element` | 新增字段→INSERT；修改字段→DELETE+INSERT |
-| 元数据汇总 | `edsm_metadata` | 与dataset_element一一对应，自动去重 |
+| 元数据汇总 | `edsm_metadata` | 与dataset_element**一一对应、各自独立**，每个元素生成一条专属metadata，绝不共用/去重 |
 
 ### ID命名规则
 
@@ -639,7 +674,7 @@ Word文档中的"数据集区域"二级标题（如"患者基本信息"、"门�
 
 | Word列头 | dataset_element字段 | 说明 |
 |---------|---------------------|------|
-| 数据元标识 | element_code | 字段英文名 |
+| 数据元标识 | element_code | 字段英文名（大小写与标准文档一致，不转换：文档大写则大写、小写则小写） |
 | 数据元名称 | element_name | 字段中文名 |
 | 说明/定义 | definition | 字段定义说明 |
 | 约束(M/O) | notnull | 1=M(必填), 0=O(可选) |
@@ -672,10 +707,11 @@ insert into edsm_dataset(...) select ...;
 insert into edsm_dataset_element(...) select ...;
 ```
 
-**元数据去重**：
-- edsm_metadata与edsm_dataset_element一一对应
-- metadata_code格式：`HDS{标准序号}{分类序号}.{数据集序号}.{字段序号}`
-- 自动检测已存在的metadata_id，避免重复插入
+**元数据一对一（重要，废除共用/去重）**：
+- edsm_metadata 与 edsm_dataset_element **一一对应**：每一条 dataset_element 都生成一条独立、专属的 metadata，绝不按字段名共用同一份元数据（否则同名不同表的字段会串号）
+- `metadata_id` = `metadata_code` = `element_id`（即 `{standard_id}-{dataset_no}-{element_code}`）
+- `dataset_element.metadata_id` 直接关联自己的 `element_id`，不再通过 `element_code` 字段名反查
+- 脚本通过 `not exists (select 1 from edsm_metadata where metadata_id = a.element_id)` 保证幂等增量；历史已存在的元数据**不做任何改动**
 
 ---
 
@@ -978,6 +1014,57 @@ python3 ~/.hermes/skills/software-development/reg-ddl-generator/scripts/run_gene
 **示例文件名**：
 - `V20260611184025__create_table_base_exam_item.sql` - 检查检验项目目录表
 - `V20260611184025__create_table_exam_item_mapping.sql` - 对照表
+
+---
+
+## Doris 脚本生成规范（v4.6.0）
+
+当目标数据库为 Doris（BMS 60 模型 edsm_sql/doris 目录）时：
+
+| 规范项 | 要求 |
+|--------|------|
+| 生成路径 | 先按 postgresql 方言生成 probe（`--db postgresql --case lower --no-tran-log --no-public-fields`），再用 `scripts/convert_doris.py` 转换 |
+| 文件命名 | `V{YYYYMMDDHHMMSS}__alter_table_medical_std_{yymmdd}.sql`（与 GP 同时间戳） |
+| DDL脚本目录 | `.../edsm_sql/doris/` |
+| 大小写 | 全小写（表名/字段名/类型/SQL关键字） |
+| 建表语句 | `create table if not exists t( ... )` + `unique key(...)` + `comment '...'` + `distributed by hash(首主键列) buckets 8;` |
+| 桶数量 | **固定 `buckets 8`**（用户 2026-08-27 确定） |
+| 副本数 | **不输出 `properties ('replication_num' = '...')`**（用户明确去除） |
+| 新增字段 | `alter table t add column c type null comment '...';` 单行 |
+| **同表合并（重要）** | **同一张表的多个字段变更必须合并为【单条】ALTER 语句**，多子句逗号分隔、分号在末条，缩进 4 空格。Doris 不允许同一张表分多条 ALTER，否则执行报错。参考 `doris/V20260729153107__alter_table_sign_record_234455.sql` |
+| 幂等 | 不写 if exists 判断（Doris 无该语法），直接裸 ALTER；建表用 `if not exists` |
+| 类型映射 | PostgreSQL probe 的定点数 `numeric(p[,s])` 在转换时自动改为 Doris 的 `decimal(p[,s])`；`timestamp` → `datetime`。**Doris 无 NUMERIC / TIMESTAMP 类型**，原样透传会报 `mismatched input 'numeric'` 解析错误。其余类型（varchar / date / int / text / boolean / json 等）两库一致，原样保留（映射逻辑见 `convert_doris.py` 的 `to_doris_type`） |
+| **字符串长度 ×4（重要）** | Doris 存储 UTF-8 中文，**1 个汉字 3 字节、1 个特殊字符 4 字节**；标准文档长度按【字符数】控制，脚本中字符串字段长度必须按字节数定义 → 转换层自动将 `varchar(n)`/`char(n)` 统一 **×4**（如 `varchar(100)` → `varchar(400)`）。**上游 PG probe 保持文档原始长度，禁止提前手动 ×4（否则转换后变 ×16）**；最大 4000 → 16000，未超 Doris 65533 上限。转换后自检：可执行代码区所有 varchar/char 长度必须能被 4 整除 |
+| 校验 | 生成后用 `verify_sql.py <输出.sql> --db doris` 扫描可执行代码区，若残留 `numeric`/`timestamp`（提示转 DECIMAL/DATETIME）、或 varchar/char 长度非 4 倍数，直接报警；`/* */` 与 `--` 注释会被剥离，不会误报变更说明文字 |
+
+**ALTER 合并示例**（同表多字段，长度已按 ×4 展示，如原文档 `varchar(2)` → `varchar(8)`）：
+```sql
+alter table emr_outp
+    add column hosp_code varchar(8) null comment '院区代码',
+    add column hosp_name varchar(280) null comment '院区名称',
+    add column outp_no varchar(256) null comment '门（急）诊号',
+    add column symptom_desc varchar(4096) null comment '症状描述';
+
+alter table emr_emergency_obs
+    add column hosp_code varchar(8) null comment '院区代码',
+    add column hosp_name varchar(280) null comment '院区名称',
+    add column outp_no varchar(256) null comment '门（急）诊号',
+    add column disposal_plan varchar(8000) null comment '处置计划';
+```
+
+**建表示例**（新表）：
+```sql
+create table if not exists emr_health_info(
+    sys_soid varchar(64) not null comment '系统编码',
+    health_info_id varchar(64) not null comment '基本健康信息唯一标识',
+    ...
+)
+unique key(sys_soid, health_info_id)
+comment '基本健康信息'
+distributed by hash(sys_soid) buckets 8;
+```
+
+> 转换脚本：`scripts/convert_doris.py`（已内置同表合并、buckets 8、去副本数、字符串长度 ×4 规则）。生成后自检：输出中不得出现 `replication_num`、`buckets 1`；所有 varchar/char 长度必须能被 4 整除（可跑 `verify_sql.py --db doris` 校验）。
 
 ---
 

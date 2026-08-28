@@ -260,6 +260,10 @@ class KnowledgeBaseManager:
                         mappings[source_name + '_alt'] = info['target_alt']
         self._cache['learned_mappings'] = mappings
 
+    # 容易因“所在表”不同而有不同对应源字段的歧义字段，不做跨表全局复用
+    # （例如“姓名”在患者表对应 FULL_NAME，在医护人员表对应 EMPLOYEE_NAME）
+    AMBIGUOUS_FIELDS = {'姓名', '名称', 'patient_name', 'name', '患者姓名', '病人姓名'}
+
     def _load_user_custom_mappings(self):
         """加载用户自定义映射（优先级最高）"""
         path = os.path.join(self.kb_dir, 'user_custom_mappings.yaml')
@@ -271,6 +275,9 @@ class KnowledgeBaseManager:
         # 同时加载字段映射（用于field_mappings合并）
         # 使用target_table.target_field作为key，避免不同表的同名字段冲突
         mappings = {}
+        # 跨表全局复用索引：key=字段语义(中文名/英文名)，value=源字段信息（不绑定源表）
+        # 这是“越积累越准”的核心：确认过的字段映射一次学习、全表复用
+        global_mappings = {}
         if data:
             for mapping in data.get('mappings', []):
                 target_table = mapping.get('target_table', '')
@@ -284,7 +291,21 @@ class KnowledgeBaseManager:
                     'description': f"用户自定义映射: {target_table}.{target_field}",
                     'match_type': 'user_custom'
                 }
+                # 构建全局索引（仅对非歧义字段）：去掉源表约束，按当前对齐源表解析
+                if target_field and target_field not in self.AMBIGUOUS_FIELDS:
+                    src_en = mapping.get('source_field_en') or mapping.get('source_field', '')
+                    src_cn = mapping.get('source_field_cn') or mapping.get('source_field', '')
+                    if src_en or src_cn:
+                        global_mappings[target_field] = {
+                            'target_fields': [target_field],
+                            'source_field': src_en or src_cn,
+                            'source_field_cn': src_cn,
+                            'source_table': '',  # 全局复用：不绑定源表
+                            'description': f"全局字段映射(跨表复用): {target_field}",
+                            'match_type': 'user_custom'
+                        }
         self._cache['user_custom_field_mappings'] = mappings
+        self._cache['user_custom_field_mappings_global'] = global_mappings
 
     def _load_relations(self):
         """加载表关联关系（从 relations/ 目录）

@@ -143,9 +143,20 @@ class CompatibilityRule:
             target_prefix = target_cn
             source_prefix = source_cn
 
-        # 前缀不同则不兼容
-        if target_prefix != source_prefix:
-            return False
+        # 尾词种类（如"号""码""名称"）作为前缀时视为无真正前缀——"电话号码"的
+        # split('电话')→['号','号码']，'号'不是语义前缀，应视为无前缀。
+        _tail_kinds = {'号', '码', '名称', '代码', '编码', '编号', '序号', '标识', '号码', '流水号'}
+        if target_prefix in _tail_kinds:
+            target_prefix = ''
+        if source_prefix in _tail_kinds:
+            source_prefix = ''
+
+        # 前缀不同则不兼容。但允许以下情况：
+        # 1. 一方无前缀（通用"电话"匹配特定"联系电话"）
+        # 2. 一方前缀是另一方的子串（"联系人"匹配"联系"）
+        if target_prefix != source_prefix and target_prefix and source_prefix:
+            if target_prefix not in source_prefix and source_prefix not in target_prefix:
+                return False
 
         return True
 
@@ -173,7 +184,14 @@ class CompatibilityRule:
         return True
 
     def _precision_check(self, target_field, source_field) -> bool:
-        """精度检查（日期 vs 日期时间）"""
+        """精度检查（日期 vs 日期时间）
+
+        判据以**中文名**为主。两个标准对同一数据元的 data_type 标注经常不一致
+        （云南「转诊(院)日期时间」标 D，区域平台「转诊（院）日期时间」也标 D），
+        若拿 data_type 当硬判据，会把语义完全相同的字段判成不兼容而漏配。
+        因此：只要两边中文名的"时间语义"一致，就不因精度拒绝——
+        类型/长度差异交由 modification 记录为字段属性变更。
+        """
         target_cn = target_field.chinese_name or ''
         source_cn = source_field.chinese_name or ''
 
@@ -181,6 +199,11 @@ class CompatibilityRule:
         time_keywords = self.config.get('time_keywords', [])
         date_types = [t.lower() for t in self.config.get('date_types', [])]
         datetime_types = [t.lower() for t in self.config.get('datetime_types', [])]
+
+        # 中文名时间语义一致 -> 同一数据元，不拒绝
+        if (any(kw in target_cn for kw in time_keywords)
+                == any(kw in source_cn for kw in time_keywords)):
+            return True
 
         target_has_time = any(kw in target_cn for kw in time_keywords) or \
                           (target_field.data_type or '').lower() in datetime_types

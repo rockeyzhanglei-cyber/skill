@@ -43,19 +43,25 @@ CSV文件应包含以下列：
 - COLUMN_ID - 列顺序
 - PK_FLAG - 是否主键（Y/N）
 - PK_CONSTRAINT_NAME - 主键约束名
+- PK_POSITION - 主键列位置
 - TABLE_COMMENTS - 表注释
 - COLUMN_COMMENTS - 列注释
 
-### 3. 读取表范围
+### 3. 从MD文件提取表清单
 
-从 `table_scope.json` 读取需要重建的表列表：
-```python
-with open(task_dir / "table_scope.json", "r") as f:
-    scope = json.load(f)
-    
-base_tables = scope["base_tables"]  # 原表列表
-all_tables = scope["all_tables"]    # 包含_TRAN/_LOG的完整列表
+通过 `--md` 参数指定 `table_structure.md`，脚本自动从中提取表清单：
+
+```bash
+# Oracle 重建
+python generate_oracle_ddl.py --csv base_schema.csv --md table_structure.md --mode rebuild --output rebuild.sql
+
+# SQL Server 重建
+python generate_sqlserver_ddl.py --csv base_schema.csv --md table_structure.md --mode rebuild --output rebuild.sql
 ```
+
+脚本内部流程：
+1. `extract_table_list_from_md()` 解析 MD 的"## 表清单"章节，提取英文表名
+2. `expand_tables_with_suffix()` 自动扩展为包含 _TRAN/_LOG 的完整列表
 
 ### 4. 生成DDL脚本
 
@@ -182,29 +188,61 @@ COMMENT ON COLUMN "OWNER"."TABLE_NAME"."COLUMN_NAME" IS '列注释内容';
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-重建模式DDL生成脚本
+重建模式DDL生成脚本（参考实现）
 用途：根据基准库CSV生成目标库的完整DDL（DROP + CREATE）
+实际使用时应优先使用固化脚本：
+  scripts/generate_oracle_ddl.py
+  scripts/generate_sqlserver_ddl.py
 """
 
 import csv
-import json
+import re
+import sys
 from pathlib import Path
 from collections import defaultdict
 
-def load_table_scope(task_dir):
-    """加载表范围"""
-    ```python
-    import csv
 
-    def read_csv(csv_path, encoding='utf-8'):
-        """读取CSV文件"""
-        with open(csv_path, 'r', encoding=encoding) as f:
-            reader = csv.DictReader(f)
-            return list(reader)
+def read_csv(csv_path, encoding='utf-8'):
+    """读取CSV文件"""
+    with open(csv_path, 'r', encoding=encoding) as f:
+        reader = csv.DictReader(f)
+        return list(reader)
 
-    # 读取基准库CSV
-    rows = read_csv('baseline.csv')
-```
+
+def extract_table_list_from_md(md_path):
+    """从 table_structure.md 提取表清单（解析"## 表清单"章节）"""
+    with open(md_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    pattern = r'^##\s+表清单\s*\n(.*?)(?=^##\s|^---|\Z)'
+    match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+    if not match:
+        print("错误：未找到'## 表清单'章节", file=sys.stderr)
+        sys.exit(1)
+    tables = []
+    for line in match.group(1).strip().split('\n'):
+        line = line.strip()
+        if not line.startswith('|'):
+            continue
+        if re.match(r'^\|[\s\-:|]+\|$', line):
+            continue
+        if '英文表名' in line:
+            continue
+        cells = [c.strip() for c in line.split('|')[1:-1]]
+        if len(cells) >= 3:
+            table_name = cells[2].strip()
+            if table_name and re.match(r'^[A-Z][A-Z0-9_]*$', table_name):
+                tables.append(table_name)
+    return tables
+
+
+def expand_tables_with_suffix(base_tables):
+    """将基础表名扩展为包含 _TRAN 和 _LOG 后缀的完整列表"""
+    all_tables = set()
+    for table in base_tables:
+        all_tables.add(table)
+        all_tables.add(f"{table}_TRAN")
+        all_tables.add(f"{table}_LOG")
+    return sorted(all_tables)
 
 def is_derived_table(table_name):
     """判断是否为衍生表（_TRAN/_LOG）"""
@@ -308,12 +346,12 @@ def generate_column_comments(owner, table_name, columns):
             lines.append(f"COMMENT ON COLUMN \"{owner}\".\"{table_name}\".\"{col_name}\" IS '{escaped_comment}';")
     return "\n".join(lines)
 
-def generate_rebuild_ddl(task_dir, output_file="rebuild_schema.sql"):
+def generate_rebuild_ddl(csv_path, md_path, output_file="rebuild_schema.sql"):
     """生成完整的重建DDL脚本"""
     
-    # 加载配置
-    scope = load_table_scope(task_dir)
-    csv_path = task_dir / "base_schema.csv"
+    # 从MD提取表清单
+    base_tables = extract_table_list_from_md(md_path)
+    all_tables = expand_tables_with_suffix(base_tables)
     
     # 读取CSV
     rows = read_csv(csv_path)
@@ -405,7 +443,7 @@ def generate_rebuild_ddl(task_dir, output_file="rebuild_schema.sql"):
             ddl_lines.append("")
     
     # 写入文件
-    output_path = task_dir / output_file
+    output_path = Path(output_file)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(ddl_lines))
     
@@ -417,12 +455,11 @@ def generate_rebuild_ddl(task_dir, output_file="rebuild_schema.sql"):
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) < 2:
-        print("用法: python rebuild_ddl_generator.py <task_dir>")
+    if len(sys.argv) < 3:
+        print("用法: python rebuild_ddl_generator.py <csv_path> <md_path>")
         sys.exit(1)
     
-    task_dir = Path(sys.argv[1])
-    generate_rebuild_ddl(task_dir)
+    generate_rebuild_ddl(sys.argv[1], sys.argv[2])
 
 ```
 
@@ -462,7 +499,7 @@ if __name__ == "__main__":
    - 空注释是否被跳过
 
 7. **表范围**
-   - 是否只处理了table_scope.json中定义的表
+   - 是否只处理了--md参数指定的表清单中的表
    - _TRAN和_LOG表是否包含在内
 
 ---

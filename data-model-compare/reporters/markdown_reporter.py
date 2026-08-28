@@ -8,6 +8,8 @@ Markdown报告生成器
 from datetime import datetime
 from typing import Dict, List
 
+from .html_reporter import _build_source_lookup, _resolve_table, _fmt_value_domain
+
 
 class MarkdownReporter:
     """Markdown报告生成器"""
@@ -49,13 +51,17 @@ class MarkdownReporter:
 
         # 如果全是英文，返回空中文名
         if re.match(r'^[A-Z][A-Z0-9_]+$', table_name):
+            # 有独立中文名时使用之（如 source_table="PERSON" + table_chinese="患者基本信息"）
+            if table_chinese and table_chinese != table_name:
+                return table_chinese, table_name
             return '', table_name
 
         # 默认情况
         return table_name, table_name
 
     def generate(self, results: Dict, output_path: str, title: str = "数据模型比对报告",
-                 target_doc=None, source_doc=None):
+                 target_doc=None, source_doc=None, source_name: str = None,
+                 target_name: str = None):
         """生成MD报告
 
         Args:
@@ -64,7 +70,22 @@ class MarkdownReporter:
             title: 报告标题
             target_doc: 目标标准标准化文档
             source_doc: 原标准标准化文档
+            source_name: 原标准名称（用于表头，默认从 title 解析）
+            target_name: 目标标准名称（用于表头，默认从 title 解析）
         """
+
+        # 从标题推导标准名称（避免把版本号写死在代码里，例如误写成 v5.5）
+        if source_name is None or target_name is None:
+            base = title
+            if base.endswith('数据模型比对报告'):
+                base = base[:-len('数据模型比对报告')].strip()
+            if ' vs ' in base:
+                a, b = base.split(' vs ', 1)
+                source_name = source_name or a.strip()
+                target_name = target_name or b.strip()
+            else:
+                source_name = source_name or '原标准'
+                target_name = target_name or '目标标准'
 
         # 统计数据
         total_fields = len(results['matched']) + len(results['modified_fields']) + len(results['new_fields'])
@@ -126,6 +147,7 @@ class MarkdownReporter:
         if source_doc:
             for table in source_doc.tables:
                 source_table_index[table.name] = table
+        source_table_lookup = _build_source_lookup(source_doc)
 
         # 构建比对结果索引
         matched_index = {}  # (table_name, field_name) -> match_result
@@ -310,6 +332,9 @@ class MarkdownReporter:
                         source_display = source_field
                     else:
                         source_display = '-'
+                    cond_disp = match.get('condition_display', '')
+                    if cond_disp:
+                        source_display += f"（{cond_disp}）"
                     md += f"| {row_num} | {field_name} | {field_chinese_name} | {field_data_type} | {field_length} | {field_constraint} | 🟢 满足 | {source_display} | {match_type} |\n"
                     row_num += 1
 
@@ -331,6 +356,9 @@ class MarkdownReporter:
                         source_display = source_field
                     else:
                         source_display = '-'
+                    cond_disp = mod.get('condition_display', '')
+                    if cond_disp:
+                        source_display += f"（{cond_disp}）"
                     md += f"| {row_num} | {field_name} | {field_chinese_name} | {field_data_type} | {field_length} | {field_constraint} | 🟠 修改 | {source_display} | {modifications} |\n"
                     row_num += 1
 
@@ -360,17 +388,23 @@ class MarkdownReporter:
                     desc_display = field_desc
 
                     # 构建原标准对应字段显示（红色标注）
-                    # 格式：原标准表名[表英文名].原标准字段名[字段中文名]
-                    # 但因为是新增字段，所以显示建议的表名和字段名
-                    if new_field_target and generated_name:
-                        # 从source_table_index获取原标准表的中文名
-                        source_table_obj = source_table_index.get(new_field_target) if source_table_index else None
-                        source_table_cn = ''
-                        if source_table_obj:
-                            source_table_cn = getattr(source_table_obj, 'chinese_name', '') or ''
-
-                        # 原标准区域：红色加粗字体
-                        source_display = f"**<font color='red'>{source_table_cn}[{new_field_target}].{field_chinese_name}[{generated_name}]</font>**"
+                    # 新增字段：仅展示 表中文[表英文].字段中文，不需要英文字段名
+                    vd_new = new.get('value_domains', []) if new else []
+                    if new_field_target:
+                        tobj = _resolve_table(source_table_lookup, new_field_target)
+                        if tobj:
+                            tcn = tobj.chinese_name or new_field_target
+                            ten = tobj.name
+                        else:
+                            tcn = new_field_target
+                            ten = ''
+                        if ten:
+                            source_display = f"**<font color='red'>{tcn}[{ten}].{field_chinese_name}</font>**"
+                        else:
+                            source_display = f"**<font color='red'>{tcn}.{field_chinese_name}</font>**"
+                        vd_str = _fmt_value_domain(vd_new)
+                        if vd_str:
+                            source_display += f"（值域：{vd_str}）"
                         source_type_length = f"**<font color='red'>{field_type}/{field_length}/{field_constraint}</font>**" if field_type else f"**<font color='red'>{field_length}/{field_constraint}</font>**"
                         source_desc = f"**<font color='red'>{field_desc}</font>**" if field_desc else ''
 
@@ -385,9 +419,11 @@ class MarkdownReporter:
                             target_sub_field = new.get('name', '')
                             note = f"需新增（对应子表 {target_sub_table} 的字段 {target_sub_field}）"
                             md += f"| {row_num} | {field_display} | {type_length_constraint} | {desc_display} | 🔴 新增 | {source_display} | {source_type_length} | {source_desc} | {note} |\n"
-                        else:
-                            # 普通新增字段
-                            note = ""
+                        elif new and new.get('address_subtable_rerouted'):
+                            # 地址族字段重归属：保留在目标表下，标注建议归入地址子表
+                            note = (f"🔶 地址信息字段，建议归入地址子表 "
+                                    f"{new.get('source_table_name', '')}"
+                                    f"（原归属：{new.get('rerouted_from', '')}）")
                             md += f"| {row_num} | {field_display} | {type_length_constraint} | {desc_display} | 🔴 新增 | {source_display} | {source_type_length} | {source_desc} | {note} |\n"
                     else:
                         # 如果没有生成字段名或目标表，使用原来的显示方式
@@ -406,6 +442,10 @@ class MarkdownReporter:
                             md += f"| {row_num} | {field_display} | {type_length_constraint} | {desc_display} | 🔴 新增 | {source_display} | {source_type_length} | {source_desc} | {note} |\n"
                         else:
                             note = ""
+                            if new and new.get('address_subtable_rerouted'):
+                                note = (f"🔶 地址信息字段，建议归入地址子表 "
+                                        f"{new.get('source_table_name', '')}"
+                                        f"（原归属：{new.get('rerouted_from', '')}）")
                             md += f"| {row_num} | {field_display} | {type_length_constraint} | {desc_display} | 🔴 新增 | {source_display} | {source_type_length} | {source_desc} | {note} |\n"
                     row_num += 1
 

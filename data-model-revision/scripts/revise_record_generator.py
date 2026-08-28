@@ -123,10 +123,11 @@ def generate_project_code(seq, abbr):
 def generate_revise_summary(parse_result):
     """生成修订摘要
 
-    格式参考reg-ddl-generator的修订记录注释：
-    - 新增表：表名中文[表名]
-    - 新增字段：表名中文[表名]新增字段：字段名中文[字段名,类型,约束]
-    - 修改字段：表名中文[表名]修改字段：字段名中文[字段名] - 修改属性：属性名1,属性名2
+    字段项格式与批量排版以 `references/bms-script-spec.md`《注释规范》为准：
+    - 新增表：表名中文[表名] - 新增表
+    - 新增字段：表名中文[表名]新增字段：字段名中文[字段代码,填报要求,数据类型,表示格式]
+    - 修改字段：表名中文[表名]修改字段：字段名中文[字段代码]（旧→新），每字段独立一行
+    - 同表多字段顿号合一行
     """
     summary_lines = []
 
@@ -181,8 +182,10 @@ def generate_revise_record_insert(revise_id, standard_id, version, require_no, s
     published_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     created_at = published_at
 
-    # 转义summary中的单引号
+    # 转义summary中的单引号；并把真实换行转成字面 \n，保证 INSERT 单行、DB 存储与头部 /* */ 清单逐字一致
     summary_escaped = summary.replace("'", "''") if summary else ''
+    if summary_escaped:
+        summary_escaped = summary_escaped.replace('\n', '\\n')
 
     # 项目化时加入project_code字段
     if is_standard == 0 and project_code:
@@ -272,15 +275,54 @@ def generate_value_set_insert(revise_id, code_system_id, code_system_name, value
     return sql
 
 
-def generate_metadata_insert(revise_id, standard_id, metadata_code, metadata_name, definition,
+# ---- 数据元标识符(external_id) 自动生成（规则见 references/external-id-spec.md）----
+_EXTERNAL_ID_INDEX = None
+
+
+def load_external_id_index():
+    """懒加载 Skill 内的 external_id_index.json（由 base_data 四表 CSV 全量构建）"""
+    global _EXTERNAL_ID_INDEX
+    if _EXTERNAL_ID_INDEX is None:
+        p = os.path.join(SCRIPT_DIR, 'external_id_index.json')
+        if os.path.exists(p):
+            with open(p, encoding='utf-8') as f:
+                _EXTERNAL_ID_INDEX = json.load(f)
+    return _EXTERNAL_ID_INDEX
+
+
+def compute_external_id(standard_id, dataset_code, element_seq_no):
+    """按 external-id-spec.md 规则生成数据元标识符 external_id。
+
+    HDS{standard_seq:02d}{category_seq:02d}.{dataset_seq:03d}.{element_seq:03d}
+    返回 '' 表示索引缺失或查不到（不应发生于正常流程）。
+    """
+    idx = load_external_id_index()
+    if not idx:
+        return ''
+    std_seq = idx.get('standards', {}).get(standard_id)
+    ds = idx.get('datasets', {}).get(standard_id, {}).get(dataset_code)
+    if std_seq is None or ds is None:
+        return ''
+    cat_seq = idx.get('categories', {}).get(standard_id, {}).get(ds.get('category_id'))
+    if cat_seq is None:
+        return ''
+    def lp(n, w):
+        return str(int(n)).zfill(w)
+    return f"HDS{lp(std_seq, 2)}{lp(cat_seq, 2)}.{lp(ds['seq_no'], 3)}.{lp(element_seq_no, 3)}"
+
+
+def generate_metadata_insert(revise_id, standard_id, element_id, metadata_name, definition,
                              data_type, representation_format, code_system_id='', allow='',
-                             external_id='', timestamp):
-    """生成metadata类型的修订明细INSERT语句
+                             external_id='', timestamp=''):
+    """生成metadata类型的修订明细INSERT语句（一对一：每个数据集元素一个元数据）
+
+    metadata_id 与 metadata_code 均等于 element_id（数据集元素唯一标识），
+    datasetElement.metadata_id 指向自己的 element_id，互不共用。
 
     Args:
         revise_id: 修订记录ID
         standard_id: 标准ID
-        metadata_code: 数据元代码
+        element_id: 数据集元素唯一标识（{standard_id}-{数据集代码}-{字段代码}）
         metadata_name: 数据元名称
         definition: 数据元定义
         data_type: 数据类型
@@ -295,14 +337,14 @@ def generate_metadata_insert(revise_id, standard_id, metadata_code, metadata_nam
     """
     revise_detail_id = str(uuid.uuid4())
     business_code = 'metadata'
-    business_id = f"{standard_id}-{metadata_code}"
+    business_id = element_id
 
-    # 构建revise_after（edsm_metadata表字段）
+    # 构建revise_after（edsm_metadata表字段）：metadata_id / metadata_code 均为 element_id
     metadata_info = {
-        "metadata_id": business_id,
+        "metadata_id": element_id,
         "namespace_id": "1",
         "external_id": external_id,
-        "metadata_code": metadata_code,
+        "metadata_code": element_id,
         "metadata_name": metadata_name,
         "definition": definition,
         "data_type": data_type,
@@ -323,7 +365,7 @@ def generate_metadata_insert(revise_id, standard_id, metadata_code, metadata_nam
 
 def generate_dataset_element_insert(revise_id, dataset_id, element_code, element_name, definition,
                                     is_pk, notnull, data_type, representation_format, code_system_id='',
-                                    allow='', seq_no='', metadata_id='', internal_id='', timestamp):
+                                    allow='', seq_no='', metadata_id=None, internal_id='', timestamp=''):
     """生成datasetElement类型的修订明细INSERT语句（单行格式）
 
     Args:
@@ -339,7 +381,7 @@ def generate_dataset_element_insert(revise_id, dataset_id, element_code, element
         code_system_id: 值域ID
         allow: 允许值
         seq_no: 顺序号
-        metadata_id: 引用数据元唯一标识
+        metadata_id: 引用数据元唯一标识（默认=element_id，即一对一专属元数据）
         internal_id: 内部标识符
         timestamp: 时间戳
 
@@ -349,6 +391,8 @@ def generate_dataset_element_insert(revise_id, dataset_id, element_code, element
     revise_detail_id = str(uuid.uuid4())
     business_code = 'datasetElement'
     business_id = f"{dataset_id}-{element_code}"
+    # 一对一：未显式传入时，metadata_id 默认指向自己的 element_id
+    metadata_id = metadata_id or business_id
 
     # 构建revise_after（edsm_dataset_element表字段）
     element_info = {
@@ -419,6 +463,23 @@ def generate_revise_detail_inserts(revise_id, parse_result, standard_id):
             element_code = clean_invisible_chars(field['field_en'])
             element_name = clean_invisible_chars(field['field_cn'])
             definition = clean_invisible_chars(field.get('comment', ''))
+            element_id = f"{dataset_id}-{element_code}"
+            # 按 external-id-spec.md 规则自动生成数据元标识符（新增表元素 seq 从 1 起）
+            external_id = compute_external_id(standard_id, dataset_no, idx)
+
+            # 一对一：每个数据集元素生成一个专属元数据（metadata_id = element_id）
+            inserts.append(generate_metadata_insert(
+                revise_id=revise_id,
+                standard_id=standard_id,
+                element_id=element_id,
+                metadata_name=element_name,
+                definition=definition,
+                data_type=field.get('data_type_value', field.get('data_type', '')),
+                representation_format=field.get('format_value', ''),
+                code_system_id=field.get('code_system_id', ''),
+                external_id=external_id,
+                timestamp=timestamp
+            ))
 
             sql = generate_dataset_element_insert(
                 revise_id=revise_id,
@@ -432,6 +493,7 @@ def generate_revise_detail_inserts(revise_id, parse_result, standard_id):
                 representation_format=field.get('format_value', ''),
                 code_system_id=field.get('code_system_id', ''),
                 seq_no=str(idx),
+                metadata_id=element_id,
                 timestamp=timestamp
             )
             inserts.append(sql)
@@ -441,10 +503,33 @@ def generate_revise_detail_inserts(revise_id, parse_result, standard_id):
         dataset_no = clean_invisible_chars(change['table_en'])
         dataset_id = f'{standard_id}-{dataset_no}'
 
-        for field in change['new_fields']:
+        # 已有表新增字段：元素序号 = 该数据集现有最大元素 seq_no + 本批序号
+        base_seq = 0
+        _eidx = load_external_id_index()
+        if _eidx:
+            base_seq = _eidx.get('datasets', {}).get(standard_id, {}).get(dataset_no, {}).get('max_element_seq', 0)
+        for j, field in enumerate(change['new_fields']):
             element_code = clean_invisible_chars(field['field_en'])
             element_name = clean_invisible_chars(field['field_cn'])
             definition = clean_invisible_chars(field.get('comment', ''))
+            element_id = f"{dataset_id}-{element_code}"
+            element_seq = base_seq + (j + 1)
+            # 按 external-id-spec.md 规则自动生成数据元标识符
+            external_id = compute_external_id(standard_id, dataset_no, element_seq)
+
+            # 一对一：每个数据集元素生成一个专属元数据（metadata_id = element_id）
+            inserts.append(generate_metadata_insert(
+                revise_id=revise_id,
+                standard_id=standard_id,
+                element_id=element_id,
+                metadata_name=element_name,
+                definition=definition,
+                data_type=field.get('data_type_value', field.get('data_type', '')),
+                representation_format=field.get('format_value', ''),
+                code_system_id=field.get('code_system_id', ''),
+                external_id=external_id,
+                timestamp=timestamp
+            ))
 
             sql = generate_dataset_element_insert(
                 revise_id=revise_id,
@@ -457,7 +542,8 @@ def generate_revise_detail_inserts(revise_id, parse_result, standard_id):
                 data_type=field.get('data_type_value', field.get('data_type', '')),
                 representation_format=field.get('format_value', ''),
                 code_system_id=field.get('code_system_id', ''),
-                seq_no=str(field.get('seq_no', '')),
+                seq_no=str(element_seq),
+                metadata_id=element_id,
                 timestamp=timestamp
             )
             inserts.append(sql)
@@ -545,12 +631,10 @@ def generate_revise_script(doc_path, require_no, version, output_path, standard_
     # 生成INSERT脚本
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     with open(output_path, 'w', encoding='utf-8') as f:
-        # 文件头注释（DDL格式）
-        f.write(f"-- {summary}\n")
-        f.write(f"-- 需求: {require_no}\n")
-        if is_standard == 0:
-            f.write(f"-- 项目: {project_code or '未知'}\n")
-        f.write("\n")
+        # 文件头注释：统一 /* */ 编号清单（与配套 DDL 逐字一致），不写 -- 集合/需求/字段/说明 等辅助行
+        f.write("/*\n")
+        f.write(summary + "\n")
+        f.write("*/\n\n")
 
         # edsm_revise_record（单行格式）
         record_sql = generate_revise_record_insert(

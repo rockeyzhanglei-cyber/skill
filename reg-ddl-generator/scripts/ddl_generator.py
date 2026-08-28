@@ -87,7 +87,8 @@ TYPE_MAP = {
         'TIMESTAMP': 'timestamp',
         'TEXT': 'text',
         'CLOB': 'text',
-        'BLOB': 'blob'
+        'BLOB': 'blob',
+        'BY': 'blob'
     },
     'oracle': {
         'VARCHAR': 'varchar2',
@@ -101,21 +102,23 @@ TYPE_MAP = {
         'TIMESTAMP': 'timestamp',
         'TEXT': 'clob',
         'CLOB': 'clob',
-        'BLOB': 'blob'
+        'BLOB': 'blob',
+        'BY': 'blob'
     },
     'sqlserver': {
         'VARCHAR': 'varchar',
         'VARCHAR2': 'varchar',
-        'NUMBER': 'decimal',
-        'NUMERIC': 'decimal',
+        'NUMBER': 'numeric',
+        'NUMERIC': 'numeric',
         'INT': 'int',
         'INTEGER': 'int',
-        'DATE': 'date',
+        'DATE': 'datetime',
         'DATETIME': 'datetime',
         'TIMESTAMP': 'datetime',
         'TEXT': 'nvarchar(max)',
         'CLOB': 'nvarchar(max)',
-        'BLOB': 'varbinary(max)'
+        'BLOB': 'varbinary(max)',
+        'BY': 'varbinary(max)'
     },
     'postgresql': {
         'VARCHAR': 'varchar',
@@ -130,6 +133,7 @@ TYPE_MAP = {
         'TEXT': 'text',
         'CLOB': 'text',
         'BLOB': 'bytea',
+        'BY': 'bytea',
         'L': 'varchar(1)'
     }
 }
@@ -170,7 +174,7 @@ def map_type(data_type, length, db_type):
     elif mapped_type in ['number', 'decimal', 'numeric'] and not length_str:
         # 格式列为空但类型为N时，默认numeric(18,2)防止无精度报错
         return f"{mapped_type}(18,2)"
-    elif mapped_type in ['date', 'timestamp', 'int', 'integer']:
+    elif mapped_type in ['date', 'datetime', 'timestamp', 'int', 'integer']:
         return mapped_type
     else:
         return mapped_type
@@ -196,7 +200,36 @@ def apply_case(name, case_style):
     else:
         return name
 
-def generate_oracle_new_table_ddl(table_en, table_cn, fields, case_style, primary_keys=None, include_tran_log=True, include_public_fields=True):
+def oracle_comment_ddl(obj_type, target, comment_text, case_style):
+    """生成 Oracle 注释语句（COMMENT ON TABLE / COLUMN）。
+
+    关键修复（v4.5.0）：用「嵌套 EXECUTE IMMEDIATE 匿名块」包裹注释语句，
+    避免在同一 PL/SQL 块内刚 CREATE / ALTER 出来的字段，在随后 COMMENT 时
+    因数据字典缓存仍处不可见状态而报 ORA-00904 'column does not exist'。
+
+    生成形态（全大写示例）：
+        EXECUTE IMMEDIATE 'BEGIN EXECUTE IMMEDIATE ''COMMENT ON COLUMN T.C IS ''''备注''''; END;';
+
+    参数:
+        obj_type: 'TABLE' 或 'COLUMN'
+        target:   表名（TABLE）或 表名.列名（COLUMN）
+        comment_text: 注释内容
+        case_style: 'upper' / 'lower'
+    """
+    U = case_style == 'upper'
+    kw_exec = 'EXECUTE' if U else 'execute'
+    kw_imm = 'IMMEDIATE' if U else 'immediate'
+    kw_obj = ('COLUMN' if U else 'column') if obj_type == 'COLUMN' else ('TABLE' if U else 'table')
+    # 注释文本中的单引号转义（最内层字符串）
+    comment_inner = clean_invisible_chars(comment_text).replace("'", "''")
+    # 内层匿名块：BEGIN EXECUTE IMMEDIATE 'COMMENT ON <obj> <target> IS ''<comment>'''; END;
+    inner = "BEGIN EXECUTE IMMEDIATE 'COMMENT ON " + kw_obj + " " + target + " IS ''" + comment_inner + "'''; END;"
+    # 外层字符串：内层所有单引号翻倍
+    outer = inner.replace("'", "''")
+    return kw_exec + " " + kw_imm + " '" + outer + "';"
+
+
+def generate_oracle_new_table_ddl(table_en, table_cn, fields, case_style, primary_keys=None, include_tran_log=True, include_public_fields=True, include_comments=True):
     """生成Oracle新增表DDL（参考PostgreSQL格式风格）
 
     v3.1.0 更新：
@@ -205,13 +238,51 @@ def generate_oracle_new_table_ddl(table_en, table_cn, fields, case_style, primar
     - 统一注释风格
     - TRAN/LOG表同步独立章节
 
+    v4.4.1 修复：
+    - 大小写格式应用到所有关键字和语句（与 combined/modify 路径一致）
+    - TRAN/LOG 后缀按 case_style 生成（upper→_TRAN/_LOG，lower→_tran/_log）
+
     参数:
         include_tran_log: 是否生成TRAN/LOG关联表（默认True）
         include_public_fields: 是否添加sczt公共字段（默认True）
     """
+    U = case_style == 'upper'
     table_name = apply_case(table_en, case_style)
-    tran_name = table_name + '_tran'
-    log_name = table_name + '_log'
+    tran_name = table_name + '_TRAN' if U else table_name + '_tran'
+    log_name = table_name + '_LOG' if U else table_name + '_log'
+
+    # 大小写格式应用到所有关键字和语句
+    KW_DECLARE = 'DECLARE' if U else 'declare'
+    KW_BEGIN = 'BEGIN' if U else 'begin'
+    KW_END = 'END' if U else 'end'
+    KW_IF = 'IF' if U else 'if'
+    KW_THEN = 'THEN' if U else 'then'
+    KW_SELECT = 'SELECT' if U else 'select'
+    KW_COUNT = 'COUNT' if U else 'count'
+    KW_INTO = 'INTO' if U else 'into'
+    KW_FROM = 'FROM' if U else 'from'
+    KW_USER_TABLES = 'USER_TABLES' if U else 'user_tables'
+    KW_WHERE = 'WHERE' if U else 'where'
+    KW_TABLE_NAME = 'TABLE_NAME' if U else 'table_name'
+    KW_UPPER = 'UPPER' if U else 'upper'
+    KW_EXECUTE = 'EXECUTE' if U else 'execute'
+    KW_IMMEDIATE = 'IMMEDIATE' if U else 'immediate'
+    KW_CREATE = 'CREATE' if U else 'create'
+    KW_TABLE = 'TABLE' if U else 'table'
+    KW_CONSTRAINT = 'CONSTRAINT' if U else 'constraint'
+    KW_PRIMARY = 'PRIMARY' if U else 'primary'
+    KW_KEY = 'KEY' if U else 'key'
+    KW_COMMENT = 'COMMENT' if U else 'comment'
+    KW_ON = 'ON' if U else 'on'
+    KW_COLUMN = 'COLUMN' if U else 'column'
+    KW_IS = 'IS' if U else 'is'
+    KW_NOT = 'NOT' if U else 'not'
+    KW_NULL = 'NULL' if U else 'null'
+    KW_DEFAULT = 'DEFAULT' if U else 'default'
+    KW_V_COUNT = 'V_COUNT' if U else 'v_count'
+
+    def dt(t):
+        return t.upper() if U else t.lower()
 
     # 清理表名中的不可见字符
     table_cn = clean_invisible_chars(table_cn)
@@ -221,25 +292,25 @@ def generate_oracle_new_table_ddl(table_en, table_cn, fields, case_style, primar
     public_fields_main = []
     if include_public_fields:
         public_fields_main = [
-            {'field_en': 'sczt', 'field_cn': '创建状态', 'db_type': 'varchar2(1)', 'constraint': "default ''0'' not null"},
-            {'field_en': 'sczt_index', 'field_cn': '索引状态', 'db_type': 'varchar2(1)', 'constraint': 'null'},
-            {'field_en': 'sczt_ggws', 'field_cn': '公共卫生状态', 'db_type': 'varchar2(1)', 'constraint': 'null'},
-            {'field_en': 'sczt_ylfw', 'field_cn': '医疗服务状态', 'db_type': 'varchar2(1)', 'constraint': 'null'}
+            {'field_en': 'sczt', 'field_cn': '创建状态', 'db_type': dt('varchar2(1)'), 'constraint': f"{KW_DEFAULT} ''0'' {KW_NOT} {KW_NULL}"},
+            {'field_en': 'sczt_index', 'field_cn': '索引状态', 'db_type': dt('varchar2(1)'), 'constraint': KW_NULL},
+            {'field_en': 'sczt_ggws', 'field_cn': '公共卫生状态', 'db_type': dt('varchar2(1)'), 'constraint': KW_NULL},
+            {'field_en': 'sczt_ylfw', 'field_cn': '医疗服务状态', 'db_type': dt('varchar2(1)'), 'constraint': KW_NULL}
         ]
 
     # 主键约束（如果有）
     pk_constraint = ''
     if primary_keys and len(primary_keys) > 0:
         pk_fields = [apply_case(pk, case_style) for pk in primary_keys]
-        pk_constraint = ",\n            constraint pk_" + table_name + " primary key (" + ', '.join(pk_fields) + ")"
+        pk_constraint = ",\n            " + KW_CONSTRAINT + " PK_" + table_name + " " + KW_PRIMARY + " " + KW_KEY + " (" + ', '.join(pk_fields) + ")"
 
     # 构建字段列表（非必填加null）
     def build_field_lines(fields_list, add_null=True):
         lines = []
         for f in fields_list:
             field_name = apply_case(f['field_en'], case_style)
-            db_type = f['db_type']
-            constraint = f['constraint'] if f['constraint'] else ('null' if add_null else '')
+            db_type = dt(f['db_type'])
+            constraint = dt(f['constraint']) if f['constraint'] else (KW_NULL if add_null else '')
             lines.append("            " + field_name + " " + db_type + " " + constraint)
         return lines
 
@@ -259,27 +330,30 @@ def generate_oracle_new_table_ddl(table_en, table_cn, fields, case_style, primar
     fields_main_str = ',\n'.join(field_lines_main)
     fields_sync_str = ',\n'.join(field_lines_sync)
 
-    # 辅助函数：生成comment语句（正确处理单引号）
+    # 辅助函数：生成comment语句（嵌套 EXECUTE IMMEDIATE 包裹，避免刚建/改的字段在 COMMENT 时不可见 ORA-00904）
+    # include_comments=False 时（Oracle 用户选择不生成注释）直接返回空字符串，彻底不发 COMMENT。
     def make_comment_sql(tbl, comment_text):
-        comment_text = clean_invisible_chars(comment_text)
-        return "        execute immediate 'comment on table " + tbl + " is ''" + comment_text + "''';\n"
+        if not include_comments:
+            return ""
+        return "        " + oracle_comment_ddl('TABLE', tbl, comment_text, case_style) + "\n"
 
     def make_column_comment_sql(tbl, col, comment_text):
-        comment_text = clean_invisible_chars(comment_text)
-        return "        execute immediate 'comment on column " + tbl + "." + col + " is ''" + comment_text + "''';\n"
+        if not include_comments:
+            return ""
+        return "        " + oracle_comment_ddl('COLUMN', tbl + "." + col, comment_text, case_style) + "\n"
 
     # 开始生成DDL（简化注释风格，CREATE TABLE保持多行）
-    ddl = f"""-- {table_cn}[{table_en}] - 新增表
-declare
-    v_count number;
-begin
-    select count(*) into v_count from user_tables where table_name = upper('{table_name}');
-    if v_count = 0 then
-        execute immediate 'create table {table_name} (
-{fields_main_str}{pk_constraint}
-        )';
-        execute immediate 'comment on table {table_name} is ''{table_cn}''';
-"""
+    ddl = f"-- {table_cn}[{table_en}] - 新增表\n"
+    ddl += f"{KW_DECLARE}\n"
+    ddl += f"    {KW_V_COUNT} {dt('number')};\n"
+    ddl += f"{KW_BEGIN}\n"
+    ddl += f"    {KW_SELECT} {KW_COUNT}(*) {KW_INTO} {KW_V_COUNT} {KW_FROM} {KW_USER_TABLES} {KW_WHERE} {KW_TABLE_NAME} = {KW_UPPER}('{table_name}');\n"
+    ddl += f"    {KW_IF} {KW_V_COUNT} = 0 {KW_THEN}\n"
+    ddl += f"        {KW_EXECUTE} {KW_IMMEDIATE} '{KW_CREATE} {KW_TABLE} {table_name} (\n"
+    ddl += f"{fields_main_str}{pk_constraint}\n"
+    ddl += f"        )';\n"
+    if include_comments:
+        ddl += "        " + oracle_comment_ddl('TABLE', table_name, table_cn, case_style) + "\n"
 
     # 主表字段注释（简化）
     for f in fields:
@@ -293,17 +367,17 @@ begin
         field_name = apply_case(pf['field_en'], case_style)
         ddl += make_column_comment_sql(table_name, field_name, pf['field_cn'])
 
-    ddl += "    end if;\n"
+    ddl += f"    {KW_END} {KW_IF};\n"
 
     # TRAN表同步 - 简化注释，CREATE TABLE保持多行
     if include_tran_log:
-        ddl += f"""    select count(*) into v_count from user_tables where table_name = upper('{tran_name}');
-    if v_count = 0 then
-        execute immediate 'create table {tran_name} (
-{fields_sync_str}
-        )';
-        execute immediate 'comment on table {tran_name} is ''{table_cn}_事务''';
-"""
+        ddl += f"    {KW_SELECT} {KW_COUNT}(*) {KW_INTO} {KW_V_COUNT} {KW_FROM} {KW_USER_TABLES} {KW_WHERE} {KW_TABLE_NAME} = {KW_UPPER}('{tran_name}');\n"
+        ddl += f"    {KW_IF} {KW_V_COUNT} = 0 {KW_THEN}\n"
+        ddl += f"        {KW_EXECUTE} {KW_IMMEDIATE} '{KW_CREATE} {KW_TABLE} {tran_name} (\n"
+        ddl += f"{fields_sync_str}\n"
+        ddl += f"        )';\n"
+        if include_comments:
+            ddl += "        " + oracle_comment_ddl('TABLE', tran_name, table_cn + "_事务", case_style) + "\n"
 
         for f in fields:
             field_name = apply_case(f['field_en'], case_style)
@@ -316,16 +390,16 @@ begin
             field_name = apply_case(pf['field_en'], case_style)
             ddl += make_column_comment_sql(tran_name, field_name, pf['field_cn'])
 
-        ddl += "    end if;\n"
+        ddl += f"    {KW_END} {KW_IF};\n"
 
         # LOG表同步 - 简化注释，CREATE TABLE保持多行
-        ddl += f"""    select count(*) into v_count from user_tables where table_name = upper('{log_name}');
-    if v_count = 0 then
-        execute immediate 'create table {log_name} (
-{fields_sync_str}
-        )';
-        execute immediate 'comment on table {log_name} is ''{table_cn}_日志''';
-"""
+        ddl += f"    {KW_SELECT} {KW_COUNT}(*) {KW_INTO} {KW_V_COUNT} {KW_FROM} {KW_USER_TABLES} {KW_WHERE} {KW_TABLE_NAME} = {KW_UPPER}('{log_name}');\n"
+        ddl += f"    {KW_IF} {KW_V_COUNT} = 0 {KW_THEN}\n"
+        ddl += f"        {KW_EXECUTE} {KW_IMMEDIATE} '{KW_CREATE} {KW_TABLE} {log_name} (\n"
+        ddl += f"{fields_sync_str}\n"
+        ddl += f"        )';\n"
+        if include_comments:
+            ddl += "        " + oracle_comment_ddl('TABLE', log_name, table_cn + "_日志", case_style) + "\n"
 
         for f in fields:
             field_name = apply_case(f['field_en'], case_style)
@@ -338,14 +412,14 @@ begin
             field_name = apply_case(pf['field_en'], case_style)
             ddl += make_column_comment_sql(log_name, field_name, pf['field_cn'])
 
-        ddl += "    end if;\n"
+        ddl += f"    {KW_END} {KW_IF};\n"
 
-    ddl += "end;\n"
+    ddl += f"{KW_END};\n"
     ddl += "/\n\n"
 
     return ddl
 
-def generate_oracle_add_field_ddl(table_en, table_cn, field_en, field_cn, db_type, constraint, case_style):
+def generate_oracle_add_field_ddl(table_en, table_cn, field_en, field_cn, db_type, constraint, case_style, include_comments=True):
     """生成Oracle新增字段DDL（单个字段）
 
     v3.1.0 更新：参考PostgreSQL格式风格
@@ -360,6 +434,7 @@ def generate_oracle_add_field_ddl(table_en, table_cn, field_en, field_cn, db_typ
     table_cn_clean = clean_invisible_chars(table_cn)
     field_cn_clean = clean_invisible_chars(field_cn)
 
+    comment_line = ("        " + oracle_comment_ddl('COLUMN', table_name + '.' + field_name, field_cn_clean, case_style) + "\n") if include_comments else ""
     ddl = f"""-- {table_cn_clean}[{table_en}] - 新增字段：{field_cn_clean}
 declare
     v_count number;
@@ -367,8 +442,7 @@ begin
     select count(*) into v_count from user_tab_columns where table_name = upper('{table_name}') and column_name = upper('{field_name}');
     if v_count = 0 then
         execute immediate 'alter table {table_name} add {field_name} {db_type} null';
-        execute immediate 'comment on column {table_name}.{field_name} is ''{field_cn_clean}''';
-    end if;
+        {comment_line}    end if;
 end;
 /
 """
@@ -395,7 +469,7 @@ def _build_field_type_str(orig_type, length):
     else:
         return orig_type
 
-def generate_oracle_combined_field_ddl(table_en, table_cn, fields, case_style, include_tran_log=True):
+def generate_oracle_combined_field_ddl(table_en, table_cn, fields, case_style, include_tran_log=True, include_comments=True):
     """生成Oracle多字段合并DDL
 
     v3.2.0 更新：
@@ -473,7 +547,8 @@ def generate_oracle_combined_field_ddl(table_en, table_cn, fields, case_style, i
         ddl += f"        {KW_SELECT} {KW_COUNT}(*) {KW_INTO} {KW_V_COUNT} {KW_FROM} {KW_USER_TAB_COLUMNS} {KW_WHERE} {KW_TABLE_NAME} = {KW_UPPER}('{table_name}') {KW_AND} {KW_COLUMN_NAME} = {KW_UPPER}('{field_name}');\n"
         ddl += f"        {KW_IF} {KW_V_COUNT} = 0 {KW_THEN}\n"
         ddl += f"            {KW_EXECUTE} {KW_IMMEDIATE} '{KW_ALTER} {KW_TABLE} {table_name} {KW_ADD} {field_name} {db_type} {KW_NULL}';\n"
-        ddl += f"            {KW_EXECUTE} {KW_IMMEDIATE} '{KW_COMMENT} {KW_ON} {KW_COLUMN} {table_name}.{field_name} {KW_IS} ''{field_cn}''';\n"
+        if include_comments:
+            ddl += "            " + oracle_comment_ddl('COLUMN', table_name + "." + field_name, field_cn, case_style) + "\n"
         ddl += f"        {KW_END} {KW_IF};\n"
 
     ddl += f"    {KW_END} {KW_IF};\n"
@@ -541,7 +616,7 @@ def generate_mysql_new_table_ddl(table_en, table_cn, fields, case_style, primary
     public_fields_main = []
     if include_public_fields:
         public_fields_main = [
-            {'field_en': 'sczt', 'field_cn': '创建状态', 'db_type': 'varchar(1)', 'constraint': "default ''0'' not null"},
+            {'field_en': 'sczt', 'field_cn': '创建状态', 'db_type': 'varchar(1)', 'constraint': "default '0' not null"},
             {'field_en': 'sczt_index', 'field_cn': '索引状态', 'db_type': 'varchar(1)', 'constraint': 'null'},
             {'field_en': 'sczt_ggws', 'field_cn': '公共卫生状态', 'db_type': 'varchar(1)', 'constraint': 'null'},
             {'field_en': 'sczt_ylfw', 'field_cn': '医疗服务状态', 'db_type': 'varchar(1)', 'constraint': 'null'}
@@ -756,7 +831,7 @@ def generate_sqlserver_new_table_ddl(table_en, table_cn, fields, case_style, pri
     public_fields_main = []
     if include_public_fields:
         public_fields_main = [
-            {'field_en': 'sczt', 'field_cn': '创建状态', 'db_type': 'varchar(1)', 'constraint': "default ''0'' not null"},
+            {'field_en': 'sczt', 'field_cn': '创建状态', 'db_type': 'varchar(1)', 'constraint': "default '0' not null"},
             {'field_en': 'sczt_index', 'field_cn': '索引状态', 'db_type': 'varchar(1)', 'constraint': 'null'},
             {'field_en': 'sczt_ggws', 'field_cn': '公共卫生状态', 'db_type': 'varchar(1)', 'constraint': 'null'},
             {'field_en': 'sczt_ylfw', 'field_cn': '医疗服务状态', 'db_type': 'varchar(1)', 'constraint': 'null'}
@@ -1521,6 +1596,236 @@ end $$;
 """
     return ddl
 
+def generate_oracle_delete_field_ddl(table_en, table_cn, field_en, field_cn, db_type, case_style, include_tran_log=True):
+    """生成Oracle删除字段DDL（实际为：将字段置为非必填 NULL）
+
+    v4.3.8 新增：对应文档中"整行红色 + 删除线"的字段删除标记
+    - 不真正删列，而是 ALTER TABLE ... MODIFY col TYPE NULL
+    - 运行时判断：仅当列当前为必填（user_tab_columns.nullable='N'）才执行，
+      避免该列本就是非必填时重复 MODIFY 报错
+    - 主表 + TRAN + LOG 同步
+    """
+    table_name = apply_case(table_en, case_style)
+    tran_name = table_name + '_TRAN' if case_style == 'upper' else table_name + '_tran'
+    log_name = table_name + '_LOG' if case_style == 'upper' else table_name + '_log'
+    field_name = apply_case(field_en, case_style)
+
+    table_cn_clean = clean_invisible_chars(table_cn)
+    field_cn_clean = clean_invisible_chars(field_cn)
+    table_en_clean = clean_invisible_chars(table_en)
+    field_en_clean = clean_invisible_chars(field_en)
+
+    KW_DECLARE = 'DECLARE' if case_style == 'upper' else 'declare'
+    KW_BEGIN = 'BEGIN' if case_style == 'upper' else 'begin'
+    KW_END = 'END' if case_style == 'upper' else 'end'
+    KW_IF = 'IF' if case_style == 'upper' else 'if'
+    KW_THEN = 'THEN' if case_style == 'upper' else 'then'
+    KW_SELECT = 'SELECT' if case_style == 'upper' else 'select'
+    KW_COUNT = 'COUNT' if case_style == 'upper' else 'count'
+    KW_INTO = 'INTO' if case_style == 'upper' else 'into'
+    KW_FROM = 'FROM' if case_style == 'upper' else 'from'
+    KW_WHERE = 'WHERE' if case_style == 'upper' else 'where'
+    KW_AND = 'AND' if case_style == 'upper' else 'and'
+    KW_UPPER = 'UPPER' if case_style == 'upper' else 'upper'
+    KW_EXECUTE = 'EXECUTE' if case_style == 'upper' else 'execute'
+    KW_IMMEDIATE = 'IMMEDIATE' if case_style == 'upper' else 'immediate'
+    KW_ALTER = 'ALTER' if case_style == 'upper' else 'alter'
+    KW_TABLE = 'TABLE' if case_style == 'upper' else 'table'
+    KW_MODIFY = 'MODIFY' if case_style == 'upper' else 'modify'
+    KW_NUMBER = 'NUMBER' if case_style == 'upper' else 'number'
+    KW_V_COUNT = 'V_COUNT' if case_style == 'upper' else 'v_count'
+    KW_USER_TAB_COLUMNS = 'USER_TAB_COLUMNS' if case_style == 'upper' else 'user_tab_columns'
+    KW_TABLE_NAME = 'TABLE_NAME' if case_style == 'upper' else 'table_name'
+    KW_COLUMN_NAME = 'COLUMN_NAME' if case_style == 'upper' else 'column_name'
+    KW_NULLABLE = 'NULLABLE' if case_style == 'upper' else 'nullable'
+    KW_NULL = 'NULL' if case_style == 'upper' else 'null'
+
+    db_type_case = db_type.upper() if case_style == 'upper' else db_type.lower()
+
+    ddl = f"-- {table_cn_clean}[{table_en_clean}]{field_cn_clean}[{field_en_clean}]删除字段（置为非必填）\n"
+    ddl += f"{KW_DECLARE}\n"
+    ddl += f"    {KW_V_COUNT} {KW_NUMBER};\n"
+    ddl += f"{KW_BEGIN}\n"
+
+    # 主表：仅当列当前为 NOT NULL 才改为非必填
+    ddl += f"    {KW_SELECT} {KW_COUNT}(*) {KW_INTO} {KW_V_COUNT} {KW_FROM} {KW_USER_TAB_COLUMNS} {KW_WHERE} {KW_TABLE_NAME} = {KW_UPPER}('{table_name}') {KW_AND} {KW_COLUMN_NAME} = {KW_UPPER}('{field_name}') {KW_AND} {KW_NULLABLE} = 'N';\n"
+    ddl += f"    {KW_IF} {KW_V_COUNT} > 0 {KW_THEN}\n"
+    ddl += f"        {KW_EXECUTE} {KW_IMMEDIATE} '{KW_ALTER} {KW_TABLE} {table_name} {KW_MODIFY} {field_name} {db_type_case} {KW_NULL}';\n"
+    ddl += f"    {KW_END} {KW_IF};\n"
+
+    if include_tran_log:
+        # TRAN表
+        ddl += f"    {KW_SELECT} {KW_COUNT}(*) {KW_INTO} {KW_V_COUNT} {KW_FROM} {KW_USER_TAB_COLUMNS} {KW_WHERE} {KW_TABLE_NAME} = {KW_UPPER}('{tran_name}') {KW_AND} {KW_COLUMN_NAME} = {KW_UPPER}('{field_name}') {KW_AND} {KW_NULLABLE} = 'N';\n"
+        ddl += f"    {KW_IF} {KW_V_COUNT} > 0 {KW_THEN}\n"
+        ddl += f"        {KW_EXECUTE} {KW_IMMEDIATE} '{KW_ALTER} {KW_TABLE} {tran_name} {KW_MODIFY} {field_name} {db_type_case} {KW_NULL}';\n"
+        ddl += f"    {KW_END} {KW_IF};\n"
+        # LOG表
+        ddl += f"    {KW_SELECT} {KW_COUNT}(*) {KW_INTO} {KW_V_COUNT} {KW_FROM} {KW_USER_TAB_COLUMNS} {KW_WHERE} {KW_TABLE_NAME} = {KW_UPPER}('{log_name}') {KW_AND} {KW_COLUMN_NAME} = {KW_UPPER}('{field_name}') {KW_AND} {KW_NULLABLE} = 'N';\n"
+        ddl += f"    {KW_IF} {KW_V_COUNT} > 0 {KW_THEN}\n"
+        ddl += f"        {KW_EXECUTE} {KW_IMMEDIATE} '{KW_ALTER} {KW_TABLE} {log_name} {KW_MODIFY} {field_name} {db_type_case} {KW_NULL}';\n"
+        ddl += f"    {KW_END} {KW_IF};\n"
+
+    ddl += f"{KW_END};\n"
+    ddl += "/\n\n"
+    return ddl
+
+def generate_sqlserver_delete_field_ddl(table_en, table_cn, field_en, field_cn, db_type, case_style, include_tran_log=True):
+    """生成SQL Server删除字段DDL（实际为：将字段置为非必填）
+
+    v4.3.8 新增：对应文档中"整行红色 + 删除线"的字段删除标记
+    - ALTER TABLE ... ALTER COLUMN col TYPE NULL（需保留类型）
+    - 运行时判断：仅当 sys.columns.is_nullable=0（当前必填）才执行，避免重复置空报错
+    - 主表 + TRAN + LOG 同步
+    """
+    table_name = apply_case(table_en, case_style)
+    tran_name = table_name + '_TRAN' if case_style == 'upper' else table_name + '_tran'
+    log_name = table_name + '_LOG' if case_style == 'upper' else table_name + '_log'
+    field_name = apply_case(field_en, case_style)
+
+    table_cn_clean = clean_invisible_chars(table_cn)
+    field_cn_clean = clean_invisible_chars(field_cn)
+    table_en_clean = clean_invisible_chars(table_en)
+    field_en_clean = clean_invisible_chars(field_en)
+
+    KW_IF = 'IF' if case_style == 'upper' else 'if'
+    KW_EXISTS = 'EXISTS' if case_style == 'upper' else 'exists'
+    KW_BEGIN = 'BEGIN' if case_style == 'upper' else 'begin'
+    KW_END = 'END' if case_style == 'upper' else 'end'
+    KW_ALTER = 'ALTER' if case_style == 'upper' else 'alter'
+    KW_TABLE = 'TABLE' if case_style == 'upper' else 'table'
+    KW_COLUMN = 'COLUMN' if case_style == 'upper' else 'column'
+    KW_NULL = 'NULL' if case_style == 'upper' else 'null'
+    KW_GO = 'GO' if case_style == 'upper' else 'go'
+    KW_SELECT = 'SELECT' if case_style == 'upper' else 'select'
+    KW_FROM = 'FROM' if case_style == 'upper' else 'from'
+    KW_WHERE = 'WHERE' if case_style == 'upper' else 'where'
+    KW_AND = 'AND' if case_style == 'upper' else 'and'
+    KW_NAME = 'NAME' if case_style == 'upper' else 'name'
+    KW_OBJECT_ID = 'OBJECT_ID' if case_style == 'upper' else 'object_id'
+    SYS_TABLES = 'SYS.TABLES' if case_style == 'upper' else 'sys.tables'
+    SYS_COLUMNS = 'SYS.COLUMNS' if case_style == 'upper' else 'sys.columns'
+
+    db_type_case = db_type.upper() if case_style == 'upper' else db_type.lower()
+
+    ddl = f"-- {table_cn_clean}[{table_en_clean}]{field_cn_clean}[{field_en_clean}]删除字段（置为非必填）\n"
+
+    # 主表
+    ddl += f"{KW_IF} {KW_EXISTS} ({KW_SELECT} * {KW_FROM} {SYS_TABLES} {KW_WHERE} {KW_NAME} = '{table_name}')\n"
+    ddl += f"{KW_BEGIN}\n"
+    ddl += f"    {KW_IF} {KW_EXISTS} ({KW_SELECT} * {KW_FROM} {SYS_COLUMNS} {KW_WHERE} {KW_OBJECT_ID} = {KW_OBJECT_ID}('{table_name}') {KW_AND} {KW_NAME} = '{field_name}' {KW_AND} IS_NULLABLE = 0)\n"
+    ddl += f"        {KW_ALTER} {KW_TABLE} {table_name} {KW_ALTER} {KW_COLUMN} {field_name} {db_type_case} {KW_NULL};\n"
+    ddl += f"{KW_END}\n"
+    ddl += f"{KW_GO}\n"
+
+    if include_tran_log:
+        # TRAN表
+        ddl += f"{KW_IF} {KW_EXISTS} ({KW_SELECT} * {KW_FROM} {SYS_TABLES} {KW_WHERE} {KW_NAME} = '{tran_name}')\n"
+        ddl += f"{KW_BEGIN}\n"
+        ddl += f"    {KW_IF} {KW_EXISTS} ({KW_SELECT} * {KW_FROM} {SYS_COLUMNS} {KW_WHERE} {KW_OBJECT_ID} = {KW_OBJECT_ID}('{tran_name}') {KW_AND} {KW_NAME} = '{field_name}' {KW_AND} IS_NULLABLE = 0)\n"
+        ddl += f"        {KW_ALTER} {KW_TABLE} {tran_name} {KW_ALTER} {KW_COLUMN} {field_name} {db_type_case} {KW_NULL};\n"
+        ddl += f"{KW_END}\n"
+        ddl += f"{KW_GO}\n"
+        # LOG表
+        ddl += f"{KW_IF} {KW_EXISTS} ({KW_SELECT} * {KW_FROM} {SYS_TABLES} {KW_WHERE} {KW_NAME} = '{log_name}')\n"
+        ddl += f"{KW_BEGIN}\n"
+        ddl += f"    {KW_IF} {KW_EXISTS} ({KW_SELECT} * {KW_FROM} {SYS_COLUMNS} {KW_WHERE} {KW_OBJECT_ID} = {KW_OBJECT_ID}('{log_name}') {KW_AND} {KW_NAME} = '{field_name}' {KW_AND} IS_NULLABLE = 0)\n"
+        ddl += f"        {KW_ALTER} {KW_TABLE} {log_name} {KW_ALTER} {KW_COLUMN} {field_name} {db_type_case} {KW_NULL};\n"
+        ddl += f"{KW_END}\n"
+        ddl += f"{KW_GO}\n"
+
+    ddl += "\n"
+    return ddl
+
+def generate_mysql_delete_field_ddl(table_en, table_cn, field_en, field_cn, db_type, case_style, include_tran_log=True):
+    """生成MySQL删除字段DDL（实际为：将字段置为非必填）
+
+    v4.3.8 新增：对应文档中"整行红色 + 删除线"的字段删除标记
+    - 仅当 information_schema.columns.is_nullable='NO'（当前必填）才 ALTER 为 NULL
+    """
+    table_name = apply_case(table_en, case_style)
+    field_name = apply_case(field_en, case_style)
+
+    table_cn_clean = clean_invisible_chars(table_cn)
+    field_cn_clean = clean_invisible_chars(field_cn)
+    field_en_clean = clean_invisible_chars(field_en)
+
+    ddl = f"""-- {table_cn_clean}[{table_en}]{field_cn_clean}[{field_en_clean}]删除字段（置为非必填）
+set @dbname = database();
+set @tablename = '{table_name}';
+set @columnname = '{field_name}';
+set @preparedStatement = (select if(
+  (select count(*) from information_schema.columns
+   where table_schema = @dbname and table_name = @tablename and column_name = @columnname and is_nullable = 'NO') > 0,
+  concat('alter table ', @tablename, ' modify column {field_name} {db_type} null'),
+  'select 1'
+));
+prepare alterIfExists from @preparedStatement;
+execute alterIfExists;
+deallocate prepare alterIfExists;
+"""
+    return ddl
+
+def generate_postgresql_delete_field_ddl(table_en, table_cn, field_en, field_cn, db_type, case_style, include_tran_log=True):
+    """生成PostgreSQL删除字段DDL（实际为：将字段置为非必填）
+
+    v4.3.8 新增：对应文档中"整行红色 + 删除线"的字段删除标记
+    - 仅当 information_schema.columns.is_nullable='NO'（当前必填）才 DROP NOT NULL
+    """
+    table_name = apply_case(table_en, case_style)
+    field_name = apply_case(field_en, case_style)
+
+    table_cn_clean = clean_invisible_chars(table_cn)
+    field_cn_clean = clean_invisible_chars(field_cn)
+    field_en_clean = clean_invisible_chars(field_en)
+
+    ddl = f"""-- {table_cn_clean}[{table_en}]{field_cn_clean}[{field_en_clean}]删除字段（置为非必填）
+do $$
+begin
+    if exists (select 1 from information_schema.columns
+               where table_name = '{table_name}' and column_name = '{field_name}' and is_nullable = 'NO') then
+        alter table {table_name} alter column {field_name} drop not null;
+    end if;
+end $$;
+"""
+    return ddl
+
+def generate_revision_record_deleted_fields(deleted_fields):
+    """生成删除字段修订记录（使用原文档类型，不转换）
+
+    v4.3.8 新增：格式为 "{表中文}[{表英文}]删除字段：{字段中文}[{字段英文},类型,必填/应填]"
+    与用户要求的"删除某某表删除了某某字段"一致
+    """
+    records = []
+    for del_table in deleted_fields:
+        table_cn = clean_invisible_chars(del_table['table_cn'])
+        table_en = clean_invisible_chars(del_table['table_en'])
+        fields = del_table['deleted_fields']
+
+        field_strs = []
+        for f in fields:
+            field_cn = clean_invisible_chars(f['field_cn'])
+            field_en = clean_invisible_chars(f['field_en'])
+            type_str = f.get('db_type', '')
+            if not type_str:
+                orig_type = clean_invisible_chars(f['data_type'])
+                length = clean_invisible_chars(f['length']) if f['length'] else ''
+                is_valid_length = length and re.match(r'^[\d,\.\s]+$', length.strip())
+                no_length_types = ['DATETIME', 'DATE', 'TIMESTAMP', 'TEXT', 'CLOB', 'BLOB']
+                if orig_type.upper() in no_length_types:
+                    type_str = orig_type
+                elif is_valid_length:
+                    type_str = f"{orig_type}({length.strip()})"
+                else:
+                    type_str = orig_type
+            required_cn = clean_invisible_chars(f['required_cn'])
+            field_str = f"{field_cn}[{field_en},{type_str},{required_cn}]"
+            field_strs.append(field_str)
+
+        fields_line = '、'.join(field_strs)
+        record = f"{table_cn}[{table_en}]删除字段：{fields_line}"
+        records.append(record)
+    return records
+
 def generate_revision_record_new_tables(new_tables):
     """生成新增表修订记录
 
@@ -1554,18 +1859,19 @@ def generate_revision_record_add_fields(all_changes):
             # 清理不可见字符
             field_cn = clean_invisible_chars(f['field_cn'])
             field_en = clean_invisible_chars(f['field_en'])
-            orig_type = clean_invisible_chars(f['data_type'])
-            length = clean_invisible_chars(f['length']) if f['length'] else ''
-            # 检查length是否为有效数值（数字、逗号、小数点），否则忽略
-            is_valid_length = length and re.match(r'^[\d,\.\s]+$', length.strip())
-            # 特殊处理：DATETIME/DATE/TIMESTAMP类型不需要长度
-            no_length_types = ['DATETIME', 'DATE', 'TIMESTAMP', 'TEXT', 'CLOB', 'BLOB']
-            if orig_type.upper() in no_length_types:
-                type_str = orig_type
-            elif is_valid_length:
-                type_str = f"{orig_type}({length.strip()})"
-            else:
-                type_str = orig_type
+            # 优先使用 map_type 已映射好的 db_type（含默认长度等fallback处理）
+            type_str = f.get('db_type', '')
+            if not type_str:
+                orig_type = clean_invisible_chars(f['data_type'])
+                length = clean_invisible_chars(f['length']) if f['length'] else ''
+                is_valid_length = length and re.match(r'^[\d,\.\s]+$', length.strip())
+                no_length_types = ['DATETIME', 'DATE', 'TIMESTAMP', 'TEXT', 'CLOB', 'BLOB']
+                if orig_type.upper() in no_length_types:
+                    type_str = orig_type
+                elif is_valid_length:
+                    type_str = f"{orig_type}({length.strip()})"
+                else:
+                    type_str = orig_type
             # 字段名使用原文格式，必填/应填使用原文
             required_cn = clean_invisible_chars(f['required_cn'])
             field_str = f"{field_cn}[{field_en},{type_str},{required_cn}]"
@@ -1682,10 +1988,12 @@ def generate_full_script(parse_result, db_type, case_style, doc_name, output_pat
     new_tables = parse_result['new_tables']
     all_changes = parse_result['all_changes']
     modified_fields = parse_result.get('modified_fields', [])
+    deleted_fields = parse_result.get('deleted_fields', [])  # v4.3.8: 删除字段（置为非必填）
 
     ddl_count_new_tables = 0
     ddl_count_add_fields = 0
     ddl_count_modify_fields = 0
+    ddl_count_delete_fields = 0
     ddl_count_sync = 0
     db_type_lower = db_type.lower()
 
@@ -1725,9 +2033,21 @@ def generate_full_script(parse_result, db_type, case_style, doc_name, output_pat
         'postgresql': generate_postgresql_modify_field_ddl
     }
 
+    # v4.3.8: 删除字段（置为非必填）DDL生成器映射
+    delete_field_generators = {
+        'oracle': generate_oracle_delete_field_ddl,
+        'mysql': generate_mysql_delete_field_ddl,
+        'sqlserver': generate_sqlserver_delete_field_ddl,
+        'postgresql': generate_postgresql_delete_field_ddl
+    }
+
     new_table_gen = new_table_generators.get(db_type_lower, generate_oracle_new_table_ddl)
     combined_field_gen = combined_field_generators.get(db_type_lower, generate_oracle_combined_field_ddl)
     modify_field_gen = modify_field_generators.get(db_type_lower, generate_oracle_modify_field_ddl)
+    delete_field_gen = delete_field_generators.get(db_type_lower, generate_oracle_delete_field_ddl)
+
+    # Oracle 用户选择不生成 COMMENT 注释（避免 ORA-00904 等字典缓存问题），其余库仍生成注释
+    oracle_kwargs = {'include_comments': False} if db_type_lower == 'oracle' else {}
 
     # 预处理：转换类型
     for nt in new_tables:
@@ -1740,6 +2060,11 @@ def generate_full_script(parse_result, db_type, case_style, doc_name, output_pat
 
     for mod_table in modified_fields:
         for f in mod_table['modified_fields']:
+            f['db_type'] = map_type(f['data_type'], f['length'], db_type)
+
+    # v4.3.8: 删除字段同样需要解析目标库类型
+    for del_table in deleted_fields:
+        for f in del_table['deleted_fields']:
             f['db_type'] = map_type(f['data_type'], f['length'], db_type)
 
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -1759,6 +2084,10 @@ def generate_full_script(parse_result, db_type, case_style, doc_name, output_pat
         for record in generate_revision_record_modified_fields(modified_fields):
             f.write(record + "\n")
 
+        # v4.3.8: 删除字段记录
+        for record in generate_revision_record_deleted_fields(deleted_fields):
+            f.write(record + "\n")
+
         f.write("*/\n\n")
 
         # ========== 新增表DDL（包含TRAN和LOG）==========
@@ -1767,7 +2096,7 @@ def generate_full_script(parse_result, db_type, case_style, doc_name, output_pat
                 ddl_count_new_tables += 1
                 primary_keys = nt.get('primary_keys', [])
                 # 所有数据库都支持primary_keys参数，传递include_tran_log和include_public_fields
-                ddl = new_table_gen(nt['table_en'], nt['table_cn'], nt['fields'], case_style, primary_keys, include_tran_log, include_public_fields)
+                ddl = new_table_gen(nt['table_en'], nt['table_cn'], nt['fields'], case_style, primary_keys, include_tran_log, include_public_fields, **oracle_kwargs)
                 f.write(ddl)
 
         # ========== 新增字段DDL（合并多字段，包含TRAN/LOG同步）==========
@@ -1781,7 +2110,7 @@ def generate_full_script(parse_result, db_type, case_style, doc_name, output_pat
             if include_tran_log:
                 ddl_count_sync += len(fields) * 2  # TRAN和LOG
             # 传递 include_tran_log 参数
-            ddl = combined_field_gen(table_en, table_cn, fields, case_style, include_tran_log)
+            ddl = combined_field_gen(table_en, table_cn, fields, case_style, include_tran_log, **oracle_kwargs)
             f.write(ddl)
 
         # ========== 修改字段DDL（只有约束和表示格式变更才生成）==========
@@ -1807,19 +2136,39 @@ def generate_full_script(parse_result, db_type, case_style, doc_name, output_pat
                         f.write(ddl)
                         ddl_count_modify_fields += 1
 
+        # ========== 删除字段DDL（整行红色 + 删除线，置为非必填，含TRAN/LOG同步）==========  v4.3.8
+        for del_table in deleted_fields:
+            table_en = del_table['table_en']
+            table_cn = del_table['table_cn']
+
+            for del_field in del_table['deleted_fields']:
+                field_en = del_field['field_en']
+                field_cn = del_field['field_cn']
+                db_type = del_field['db_type']
+
+                # 生成删除（置非必填）DDL：主表 + TRAN + LOG
+                ddl = delete_field_gen(table_en, table_cn, field_en, field_cn, db_type, case_style, include_tran_log)
+                if ddl:
+                    f.write(ddl)
+                    ddl_count_delete_fields += 1
+                    if include_tran_log:
+                        ddl_count_sync += 2  # TRAN 和 LOG
+
         # 统计信息（根据用户选择动态显示）
         tran_log_suffix = "(含TRAN/LOG同步)" if include_tran_log else ""
         public_suffix = "(含公共字段)" if include_public_fields else ""
         f.write(f"-- 新增表: {len(new_tables)} 个 {tran_log_suffix}{public_suffix}\n")
         f.write(f"-- 新增字段: {ddl_count_add_fields} 个 {tran_log_suffix}\n")
         f.write(f"-- 修改字段: {ddl_count_modify_fields} 个\n")
-        f.write(f"-- DDL总数: {ddl_count_new_tables + ddl_count_add_fields + ddl_count_modify_fields} 个\n")
+        f.write(f"-- 删除字段: {ddl_count_delete_fields} 个（置为非必填）{tran_log_suffix}\n")
+        f.write(f"-- DDL总数: {ddl_count_new_tables + ddl_count_add_fields + ddl_count_modify_fields + ddl_count_delete_fields} 个\n")
 
     return {
         'output_path': output_path,
         'new_tables': len(new_tables),
         'field_count': ddl_count_add_fields,
         'modify_count': ddl_count_modify_fields,
+        'delete_count': ddl_count_delete_fields,
         'sync_count': ddl_count_sync,
-        'total_ddl': ddl_count_new_tables * 3 + ddl_count_add_fields + ddl_count_modify_fields
+        'total_ddl': ddl_count_new_tables * 3 + ddl_count_add_fields + ddl_count_modify_fields + ddl_count_delete_fields
     }

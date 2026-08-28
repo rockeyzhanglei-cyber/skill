@@ -114,21 +114,13 @@ field_mappings:
     description: "居住地行政区划代码映射到常住地址行政区划代码"
     match_type: "semantic_mapping"
 
-  # 业务数据更新日期时间映射
-  # 省平台的"业务数据更新日期时间"对应原标准的"更新日期时间"
-  - target_fields:
-      - update_time  # 业务数据更新日期时间
-    source_field: GXSJ  # 更新日期时间
-    description: "业务数据更新日期时间映射到更新日期时间（通用）"
-    match_type: "semantic_mapping"
-
-  # 业务数据产生日期时间映射
-  # 省平台的"业务数据产生日期时间"对应原标准的"数据生成日期时间"
-  - target_fields:
-      - create_time  # 业务数据产生日期时间
-    source_field: YWSCSJ  # 数据生成日期时间
-    description: "业务数据产生日期时间映射到数据生成日期时间（通用）"
-    match_type: "semantic_mapping"
+  # 业务数据更新日期时间 / 业务数据产生日期时间 的映射已由
+  # knowledge_base/field_synonyms.yaml 的"人工确认同义"条目接管：
+  #   业务数据产生日期时间 ↔ 创建日期时间
+  #   业务数据更新日期时间 ↔ 修改日期时间
+  # 原 field_mappings.yaml 中的通用映射（create_time→数据生成日期时间、
+  # update_time→更新日期时间）与人工确认同义冲突，且会越权抢占各源表自身的
+  # 创建/修改日期时间，已于 2026-08-26 移除。
 
   # ========== 门诊/住院摘要 字段映射 ==========
   # 源表: 卫生事件摘要(WSSJZY)

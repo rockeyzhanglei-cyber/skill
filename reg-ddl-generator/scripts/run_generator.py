@@ -141,7 +141,7 @@ def run_generator(doc_path, db_type='oracle', case_style='lower',
     if ddl_mode == 'full':
         should_generate_ddl = len(parse_result['new_tables']) > 0
     else:
-        should_generate_ddl = len(parse_result['new_tables']) > 0 or parse_result['changed_tables'] > 0 or parse_result['modified_tables'] > 0
+        should_generate_ddl = len(parse_result['new_tables']) > 0 or parse_result['changed_tables'] > 0 or parse_result['modified_tables'] > 0 or parse_result.get('deleted_tables', 0) > 0
 
     if should_generate_ddl:
         mode_suffix = "_FULL" if ddl_mode == 'full' else ""
@@ -167,6 +167,8 @@ def run_generator(doc_path, db_type='oracle', case_style='lower',
         print(f"  新增表: {ddl_result['new_tables']} 个 {tran_log_suffix}")
         print(f"  新增字段: {ddl_result['field_count']} 个 {tran_log_suffix}")
         print(f"  修改字段: {ddl_result['modify_count']} 个")
+        if ddl_result.get('delete_count'):
+            print(f"  删除字段: {ddl_result['delete_count']} 个（置为非必填）{tran_log_suffix}")
         print(f"  DDL总数: {ddl_result['total_ddl']} 个")
 
         # ========== 语法验证 ==========

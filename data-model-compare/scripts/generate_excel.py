@@ -145,6 +145,9 @@ def generate_excel(compare_result_path, target_standard_path, source_standard_pa
         mt = match_type_map.get(item.get('match_type', ''), '满足(精确匹配-中文)')
         source_table = item.get('source_table_chinese_name', '')
         source_field = item.get('source_field_chinese_name', '')
+        cond = item.get('condition_display', '')
+        if cond:
+            source_field = f"{source_field}（{cond}）"
         lookup[key] = (mt, source_table, source_field, False)
     
     for item in data.get('modified', []):
@@ -154,6 +157,9 @@ def generate_excel(compare_result_path, target_standard_path, source_standard_pa
         mt = match_type_modified_map.get(item.get('match_type', ''), '修改(精确匹配-中文)')
         source_table = item.get('source_table_chinese_name', '')
         source_field = item.get('source_field_chinese_name', '')
+        cond = item.get('condition_display', '')
+        if cond:
+            source_field = f"{source_field}（{cond}）"
         lookup[key] = (mt, source_table, source_field, False)
     
     for item in data.get('new_fields', []):

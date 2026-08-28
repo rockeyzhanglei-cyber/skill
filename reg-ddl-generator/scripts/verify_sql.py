@@ -7,9 +7,11 @@ v1.0.0
 - NUMBER/NUMERIC/DECIMAL 无精度
 - 括号不配对
 - 其他可疑的语法问题
+- Doris 专属：输出中不得残留 NUMERIC / TIMESTAMP 类型（Doris 仅支持 DECIMAL / DATETIME）
+- Doris 专属：varchar/char 长度必须为 4 的倍数（Doris 存储 UTF-8，字符串长度按字节×4）
 
 用法:
-    python3 verify_sql.py <sql文件路径> [--db oracle|sqlserver|mysql|postgresql]
+    python3 verify_sql.py <sql文件路径> [--db oracle|sqlserver|mysql|postgresql|doris]
 """
 
 import sys
@@ -139,8 +141,59 @@ def check_suspicious_patterns(lines, db_type):
     return issues
 
 
+def _mask_comments(text):
+    """将 /* */ 块注释与 -- 行注释替换为等长的空格，保留行号与换行，便于准确定位。"""
+    def blk(m):
+        return ' ' * len(m.group(0))
+    text = re.sub(r'/\*.*?\*/', blk, text, flags=re.DOTALL)
+    text = re.sub(r'--[^\n]*', blk, text)
+    return text
+
+
+def check_doris_type_compatibility(lines):
+    """Doris 不支持 NUMERIC / TIMESTAMP 类型，必须转换为 DECIMAL / DATETIME。
+
+    当 convert_doris.py 的 to_doris_type 漏转（或手工改脚本遗漏）时，
+    Doris 解析会报 'mismatched input numeric'。此处扫描可执行代码区，
+    若残留 numeric / timestamp 直接报警。/* */ 变更说明与 -- 注释先剥离，避免误报。
+    """
+    issues = []
+    masked = _mask_comments("\n".join(lines)).split("\n")
+    for line_no, line in enumerate(masked, 1):
+        for m in re.finditer(r'\b(numeric|timestamp)\b', line, re.IGNORECASE):
+            word = m.group(1).lower()
+            target = 'DECIMAL' if word == 'numeric' else 'DATETIME'
+            issues.append({
+                'line': line_no,
+                'content': line.strip()[:120],
+                'type': f"Doris 不支持 {word.upper()} 类型（应转换为 {target}）"
+            })
+    return issues
+
+
+def check_doris_str_len_x4(lines):
+    """Doris 字符串字段长度必须 ×4（用户 2026-08-28 确定）。
+
+    Doris 存储 UTF-8 中文 1 汉字 3 字节 / 1 特殊字符 4 字节，标准文档长度按【字符数】控制，
+    生成脚本时 varchar(n)/char(n) 的 n 统一 ×4（n 为字节数）。此处扫描可执行代码区，
+    若存在长度非 4 倍数的 varchar/char 直接报警（提示 ×4）。注释先剥离，避免误报。
+    """
+    issues = []
+    masked = _mask_comments("\n".join(lines)).split("\n")
+    for line_no, line in enumerate(masked, 1):
+        for m in re.finditer(r'\b(varchar|char)\((\d+)\)', line, re.IGNORECASE):
+            v = int(m.group(2))
+            if v % 4 != 0:
+                issues.append({
+                    'line': line_no,
+                    'content': line.strip()[:120],
+                    'type': f"Doris 字符串长度 {m.group(1)}({v}) 非 4 倍数（应统一 ×4，如 {v * 4}）"
+                })
+    return issues
+
+
 def verify_sql(sql_path, db_type='oracle'):
-    """验证SQL脚本，返回是否有问题"""
+    """验证SQL脚本，返回问题列表"""
     if not os.path.exists(sql_path):
         print(f"文件不存在: {sql_path}")
         return False
@@ -153,6 +206,9 @@ def verify_sql(sql_path, db_type='oracle'):
     all_issues.extend(check_number_without_precision(lines, db_type))
     all_issues.extend(check_unbalanced_parentheses(lines))
     all_issues.extend(check_suspicious_patterns(lines, db_type))
+    if db_type == 'doris':
+        all_issues.extend(check_doris_type_compatibility(lines))
+        all_issues.extend(check_doris_str_len_x4(lines))
 
     # 按行号排序
     all_issues.sort(key=lambda x: x['line'])
@@ -178,7 +234,7 @@ def main():
     parser = argparse.ArgumentParser(description='校验SQL脚本语法')
     parser.add_argument('sql_path', help='SQL文件路径')
     parser.add_argument('--db', default='oracle',
-                        choices=['oracle', 'sqlserver', 'mysql', 'postgresql'],
+                        choices=['oracle', 'sqlserver', 'mysql', 'postgresql', 'doris'],
                         help='数据库类型')
     args = parser.parse_args()
 

@@ -299,7 +299,7 @@ mappings:
 - target_table: 门诊/住院摘要
   target_field: 门诊/住院摘要流水号
   source_table: 卫生事件摘要
-  source_field: 就诊流水号
+  source_field: 卫生事件摘要唯一标识
   original_source_table: 门诊就诊记录表
   original_source_field: 就诊流水号
 - target_table: 门诊/住院摘要
@@ -689,13 +689,13 @@ mappings:
 - target_table: 门诊/住院摘要
   target_field: 业务数据更新日期时间
   source_table: 卫生事件摘要
-  source_field: ''
+  source_field: 修改日期时间
   original_source_table: ''
   original_source_field: ''
 - target_table: 门诊/住院摘要
   target_field: 业务数据产生日期时间
   source_table: 卫生事件摘要
-  source_field: ''
+  source_field: 创建日期时间
   original_source_table: ''
   original_source_field: ''
 - target_table: '*门急诊挂号表'
@@ -9557,7 +9557,7 @@ mappings:
 - target_table: 治疗记录-用药
   target_field: 治疗用药记录流水号
   source_table: 治疗用药记录
-  source_field: 用药明细流水号
+  source_field: 用药明细唯一标识
   original_source_table: ''
   original_source_field: ''
 - target_table: 治疗记录-用药
@@ -9959,7 +9959,7 @@ mappings:
 - target_table: 输血记录-诊断
   target_field: 输血记录流水号
   source_table: 输血记录
-  source_field: 输血流水号
+  source_field: 输血唯一标识
   original_source_table: ''
   original_source_field: ''
 - target_table: 输血记录-诊断
@@ -9983,7 +9983,7 @@ mappings:
 - target_table: 输血记录-诊断
   target_field: 数据删除标识
   source_table: 输血记录
-  source_field: 修改标志
+  source_field: 删除标志
   original_source_table: ''
   original_source_field: ''
 - target_table: 输血记录-诊断
@@ -11633,9 +11633,9 @@ mappings:
 - target_table: 会诊记录-会诊医师
   target_field: 门(急)诊号
   source_table: 门诊就诊记录表
-  source_field: 姓名
-  original_source_table: 门诊就诊记录表
-  original_source_field: 姓名
+  source_field: ''
+  original_source_table: ''
+  original_source_field: ''
 - target_table: 会诊记录-会诊医师
   target_field: 住院次数
   source_table: 住院就诊记录表
@@ -11722,10 +11722,10 @@ mappings:
   original_source_field: ''
 - target_table: 转诊(院)记录
   target_field: 居民健康卡卡号
-  source_table: 患者基本信息表
-  source_field: 电子健康卡号
-  original_source_table: ''
-  original_source_field: ''
+  source_table: 患者卡证信息表
+  source_field: 卡证号码
+  original_source_table: 患者基本信息表
+  original_source_field: 电子健康卡号
 - target_table: 转诊(院)记录
   target_field: 门(急)诊号
   source_table: 门诊就诊记录表
@@ -12946,8 +12946,8 @@ mappings:
   original_source_field: ''
 - target_table: '*患者基本信息'
   target_field: 个人基本信息标识号
-  source_table: 患者基本信息表
-  source_field: 医院内部档案号
+  source_table: 患者基本信息
+  source_field: 患者唯一标识
   original_source_table: ''
   original_source_field: ''
 - target_table: '*患者基本信息'
@@ -13160,18 +13160,9 @@ mappings:
   source_field: 修改标志
   original_source_table: ''
   original_source_field: ''
-- target_table: '*患者基本信息'
-  target_field: 业务数据更新日期时间
-  source_table: 患者基本信息表
-  source_field: 更新日期时间
-  original_source_table: ''
-  original_source_field: ''
-- target_table: '*患者基本信息'
-  target_field: 业务数据产生日期时间
-  source_table: 患者基本信息表
-  source_field: 数据生成日期时间
-  original_source_table: ''
-  original_source_field: ''
+# 以下两条 *患者基本信息 通配审计字段映射（业务数据产生/更新日期时间 → 数据生成/更新日期时间）
+# 与 2026-08-26 人工确认同义（业务数据产生日期时间↔创建日期时间、业务数据更新日期时间↔修改日期时间）
+# 冲突，且会经全局 gmap 越权抢占各源表自身的创建/修改日期时间，已于本次移除。
 - target_table: 门诊/住院摘要
   target_field: 就诊类型代码
   source_table: 门诊就诊记录表
@@ -13326,12 +13317,6 @@ mappings:
   target_field: 数据删除标识
   source_table: 门诊就诊记录表
   source_field: 修改标志
-  original_source_table: ''
-  original_source_field: ''
-- target_table: '*门急诊病历'
-  target_field: 门急诊病历流水号
-  source_table: 门(急)诊病历
-  source_field: 就诊流水号
   original_source_table: ''
   original_source_field: ''
 - target_table: '*门急诊病历'
@@ -15574,8 +15559,8 @@ mappings:
   original_source_field: ''
 - target_table: 细菌结果表
   target_field: 检验流水号
-  source_table: 细菌结果表
-  source_field: 检验流水号
+  source_table: 微生物报告结果表
+  source_field: 检验报告唯一标识
   original_source_table: ''
   original_source_field: ''
 - target_table: 细菌结果表
@@ -15696,12 +15681,6 @@ mappings:
   target_field: 药敏结果流水号
   source_table: 药敏结果表
   source_field: 药敏结果流水号
-  original_source_table: ''
-  original_source_field: ''
-- target_table: 药敏结果表
-  target_field: 检验流水号
-  source_table: 药敏结果表
-  source_field: 检验流水号
   original_source_table: ''
   original_source_field: ''
 - target_table: 药敏结果表
@@ -28233,12 +28212,6 @@ mappings:
   original_source_table: ''
   original_source_field: ''
 - target_table: 输血记录
-  target_field: 输血记录流水号
-  source_table: 输血记录
-  source_field: 输血流水号
-  original_source_table: ''
-  original_source_field: ''
-- target_table: 输血记录
   target_field: 就诊流水号
   source_table: 输血记录
   source_field: 门诊/急诊/住院流水号
@@ -28379,7 +28352,7 @@ mappings:
 - target_table: 输血记录-诊断
   target_field: 诊断代码
   source_table: 输血记录
-  source_field: 平台疾病主诊断代码
+  source_field: 主要诊断代码
   original_source_table: 疾病诊断目录
   original_source_field: 院内诊断代码
 - target_table: 体检总检表
@@ -31031,7 +31004,7 @@ mappings:
 - target_table: 输血记录-诊断
   target_field: 诊断名称
   source_table: 输血记录
-  source_field: 平台疾病主诊断名称
+  source_field: 主要诊断名称
   original_source_table: ''
   original_source_field: ''
 - target_table: 体检总检表
@@ -31484,9 +31457,44 @@ mappings:
   source_field: ''
   original_source_table: 床位信息
   original_source_field: 医疗机构名称
+- target_table: 药敏结果表
+  target_field: 检验流水号
+  source_table: 微生物药敏结果表
+  source_field: 检验报告唯一标识
+  original_source_table: ''
+  original_source_field: ''
+- target_table: 输血记录
+  target_field: 输血记录流水号
+  source_table: 输血记录
+  source_field: 输血唯一标识
+  original_source_table: ''
+  original_source_field: ''
+- target_table: '*门急诊病历'
+  target_field: 门急诊病历流水号
+  source_table: 门（急）诊病历
+  source_field: 病历唯一标识
+  original_source_table: ''
+  original_source_field: ''
+- target_table: 过敏信息表
+  target_field: 过敏原代码
+  source_table: 过敏信息
+  source_field: 过敏源代码
+  original_source_table: ''
+  original_source_field: ''
+- target_table: 过敏信息表
+  target_field: 过敏原名称
+  source_table: 过敏信息
+  source_field: 过敏源名称
+  original_source_table: ''
+  original_source_field: ''
+- target_table: 过敏信息表
+  target_field: 过敏原明细流水号
+  source_table: 过敏信息
+  source_field: 过敏信息唯一标识
+  original_source_table: ''
+  original_source_field: ''
+
 new_tables:
-- table_name: 过敏信息表
-  reason: 用户确认整表新增（所有字段源表和源字段都为空）
 - table_name: '*门急诊病历-体格检查'
   reason: 用户确认整表新增（所有字段源表和源字段都为空）
 - table_name: '*门急诊病历-检查检验'
@@ -31513,3 +31521,5 @@ new_tables:
   reason: 用户确认整表新增
 - table_name: 床位使用情况
   reason: 用户确认整表新增
+- table_name: 材料出入库信息
+  reason: 用户确认整表新增（云南源标准无材料出入库表）

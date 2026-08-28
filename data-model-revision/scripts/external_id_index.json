@@ -1,0 +1,1338 @@
+{
+  "rule": "HDS{lpad(standard_seq,2)}{lpad(category_seq,2)}.{lpad(dataset_seq,3)}.{lpad(element_seq,3)}",
+  "standards": {
+    "winning-plat-01": 1,
+    "winning-plat-02": 2,
+    "winning-plat-03": 3,
+    "winning-plat-04": 4,
+    "winning-plat-05": 5,
+    "winning-plat-06": 6,
+    "winning-plat-07": 7
+  },
+  "categories": {
+    "winning-plat-01": {
+      "winning-plat-01-基础目录": 1,
+      "winning-plat-01-患者基本信息": 2,
+      "winning-plat-01-门（急）诊信息": 3,
+      "winning-plat-01-住院信息": 4,
+      "winning-plat-01-病案首页": 5,
+      "winning-plat-01-检查检验记录": 6,
+      "winning-plat-01-体检信息": 7,
+      "winning-plat-01-手术输血记录": 8,
+      "winning-plat-01-一般治疗处置记录": 9,
+      "winning-plat-01-助产记录": 10,
+      "winning-plat-01-护理操作记录": 11,
+      "winning-plat-01-护理评估与计划": 12,
+      "winning-plat-01-知情告知信息": 13,
+      "winning-plat-01-入出院记录": 14,
+      "winning-plat-01-住院病程记录": 15,
+      "winning-plat-01-转诊（院）记录": 16,
+      "winning-plat-01-血液透析": 17,
+      "winning-plat-01-高值耗材使用记录": 18,
+      "winning-plat-01-院感信息": 19,
+      "winning-plat-01-不良事件": 20,
+      "winning-plat-01-临床路径": 21,
+      "winning-plat-01-统计指标": 22
+    },
+    "winning-plat-02": {
+      "winning-plat-02-个人健康档案": 23,
+      "winning-plat-02-家庭健康档案": 24,
+      "winning-plat-02-成人健康体检": 25,
+      "winning-plat-02-家庭医生签约": 26,
+      "winning-plat-02-健康教育": 27,
+      "winning-plat-02-预防接种": 28,
+      "winning-plat-02-2型糖尿病": 29,
+      "winning-plat-02-高血压": 30,
+      "winning-plat-02-高血脂": 31,
+      "winning-plat-02-重性精神病": 32,
+      "winning-plat-02-老年人健康管理": 33,
+      "winning-plat-02-冠心病": 34,
+      "winning-plat-02-脑卒中": 35,
+      "winning-plat-02-肺结核": 36,
+      "winning-plat-02-慢阻肺": 37,
+      "winning-plat-02-肿瘤": 38,
+      "winning-plat-02-死亡医学证明": 39,
+      "winning-plat-02-传染病及突发公卫事件报告": 40,
+      "winning-plat-02-卫生监督协管": 41,
+      "winning-plat-02-统计指标": 42
+    },
+    "winning-plat-03": {
+      "winning-plat-03-全员人口个案": 43,
+      "winning-plat-03-妇女生育史": 44,
+      "winning-plat-03-低收入人口": 45
+    },
+    "winning-plat-04": {
+      "winning-plat-04-孕产妇健康管理": 46,
+      "winning-plat-04-儿童健康管理": 47
+    },
+    "winning-plat-05": {
+      "winning-plat-05-人力资源": 48,
+      "winning-plat-05-财务": 49,
+      "winning-plat-05-物资耗材": 50,
+      "winning-plat-05-固定资产": 51,
+      "winning-plat-05-药品管理": 52
+    },
+    "winning-plat-06": {
+      "winning-plat-06-处方点评": 53
+    },
+    "winning-plat-07": {
+      "winning-plat-07-远程会诊": 54,
+      "winning-plat-07-远程检验": 55,
+      "winning-plat-07-远程影像": 56,
+      "winning-plat-07-远程心电": 57,
+      "winning-plat-07-远程病理": 58,
+      "winning-plat-07-双向转诊": 59
+    }
+  },
+  "datasets": {
+    "winning-plat-01": {
+      "BASE_EMPLOYEE": {
+        "seq_no": 1,
+        "category_id": "winning-plat-01-基础目录",
+        "max_element_seq": 47
+      },
+      "BASE_EMPLOYEE_DEPT": {
+        "seq_no": 2,
+        "category_id": "winning-plat-01-基础目录",
+        "max_element_seq": 10
+      },
+      "BASE_DEPARTMENT": {
+        "seq_no": 3,
+        "category_id": "winning-plat-01-基础目录",
+        "max_element_seq": 17
+      },
+      "BASE_WARD": {
+        "seq_no": 4,
+        "category_id": "winning-plat-01-基础目录",
+        "max_element_seq": 12
+      },
+      "BASE_WARD_DEPARTMENT": {
+        "seq_no": 5,
+        "category_id": "winning-plat-01-基础目录",
+        "max_element_seq": 11
+      },
+      "BASE_BED": {
+        "seq_no": 6,
+        "category_id": "winning-plat-01-基础目录",
+        "max_element_seq": 19
+      },
+      "BASE_CHARGE_ITEM": {
+        "seq_no": 7,
+        "category_id": "winning-plat-01-基础目录",
+        "max_element_seq": 20
+      },
+      "BASE_MATERIAL": {
+        "seq_no": 8,
+        "category_id": "winning-plat-01-基础目录",
+        "max_element_seq": 24
+      },
+      "BASE_DIAGNOSIS": {
+        "seq_no": 9,
+        "category_id": "winning-plat-01-基础目录",
+        "max_element_seq": 13
+      },
+      "BASE_OPERATION": {
+        "seq_no": 10,
+        "category_id": "winning-plat-01-基础目录",
+        "max_element_seq": 12
+      },
+      "BASE_DRUG": {
+        "seq_no": 11,
+        "category_id": "winning-plat-01-基础目录",
+        "max_element_seq": 44
+      },
+      "PERSON": {
+        "seq_no": 12,
+        "category_id": "winning-plat-01-患者基本信息",
+        "max_element_seq": 26
+      },
+      "PERSON_IDENTIFICATION": {
+        "seq_no": 13,
+        "category_id": "winning-plat-01-患者基本信息",
+        "max_element_seq": 10
+      },
+      "PERSON_ADDRESS": {
+        "seq_no": 14,
+        "category_id": "winning-plat-01-患者基本信息",
+        "max_element_seq": 22
+      },
+      "PERSON_CONTACT": {
+        "seq_no": 15,
+        "category_id": "winning-plat-01-患者基本信息",
+        "max_element_seq": 15
+      },
+      "OUTP_APPOINTMENT": {
+        "seq_no": 16,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 25
+      },
+      "OUTP_REGISTER": {
+        "seq_no": 17,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 36
+      },
+      "OUTP_CHECKIN": {
+        "seq_no": 18,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 10
+      },
+      "OUTP_ENCOUNTER": {
+        "seq_no": 19,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 26
+      },
+      "EMR_OUTP": {
+        "seq_no": 20,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 71
+      },
+      "EMR_EMERGENCY_OBS": {
+        "seq_no": 21,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 60
+      },
+      "OUTP_CLINIC_ORDER": {
+        "seq_no": 22,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 47
+      },
+      "OUTP_CLINIC_ORDER_ITEM": {
+        "seq_no": 23,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 43
+      },
+      "OUTP_DIAGNOSIS": {
+        "seq_no": 24,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 26
+      },
+      "OUTP_SETTLEMENT": {
+        "seq_no": 25,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 23
+      },
+      "OUTP_SETTLEMENT_DETAIL": {
+        "seq_no": 26,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 30
+      },
+      "OUTP_SETTLEMENT_PAYMENT": {
+        "seq_no": 27,
+        "category_id": "winning-plat-01-门（急）诊信息",
+        "max_element_seq": 17
+      },
+      "INP_ENCOUNTER": {
+        "seq_no": 28,
+        "category_id": "winning-plat-01-住院信息",
+        "max_element_seq": 21
+      },
+      "INP_REGISTER": {
+        "seq_no": 29,
+        "category_id": "winning-plat-01-住院信息",
+        "max_element_seq": 40
+      },
+      "INP_CLINIC_ORDER_ITEM": {
+        "seq_no": 30,
+        "category_id": "winning-plat-01-住院信息",
+        "max_element_seq": 74
+      },
+      "INP_SETTLEMENT": {
+        "seq_no": 31,
+        "category_id": "winning-plat-01-住院信息",
+        "max_element_seq": 25
+      },
+      "INP_SETTLEMENT_DETAIL": {
+        "seq_no": 32,
+        "category_id": "winning-plat-01-住院信息",
+        "max_element_seq": 14
+      },
+      "INP_SETTLEMENT_PAYMENT": {
+        "seq_no": 33,
+        "category_id": "winning-plat-01-住院信息",
+        "max_element_seq": 16
+      },
+      "INP_BILL_DETAIL": {
+        "seq_no": 34,
+        "category_id": "winning-plat-01-住院信息",
+        "max_element_seq": 28
+      },
+      "INP_DEPOSIT": {
+        "seq_no": 35,
+        "category_id": "winning-plat-01-住院信息",
+        "max_element_seq": 19
+      },
+      "INP_DISCHARGE": {
+        "seq_no": 36,
+        "category_id": "winning-plat-01-住院信息",
+        "max_element_seq": 22
+      },
+      "INP_DIAGNOSIS": {
+        "seq_no": 37,
+        "category_id": "winning-plat-01-住院信息",
+        "max_element_seq": 32
+      },
+      "MAHP_MAIN": {
+        "seq_no": 38,
+        "category_id": "winning-plat-01-病案首页",
+        "max_element_seq": 261
+      },
+      "MAHP_OPERATION": {
+        "seq_no": 39,
+        "category_id": "winning-plat-01-病案首页",
+        "max_element_seq": 35
+      },
+      "MAHP_DIAGNOSIS": {
+        "seq_no": 40,
+        "category_id": "winning-plat-01-病案首页",
+        "max_element_seq": 26
+      },
+      "MEDTECH_LIS_REPORT": {
+        "seq_no": 41,
+        "category_id": "winning-plat-01-检查检验记录",
+        "max_element_seq": 65
+      },
+      "MEDTECH_LIS_REPORT_RSLT": {
+        "seq_no": 42,
+        "category_id": "winning-plat-01-检查检验记录",
+        "max_element_seq": 30
+      },
+      "MEDTECH_MIS_REPORT_RSLT": {
+        "seq_no": 43,
+        "category_id": "winning-plat-01-检查检验记录",
+        "max_element_seq": 20
+      },
+      "MEDTECH_MIS_DRUG_SENS_RSLT": {
+        "seq_no": 44,
+        "category_id": "winning-plat-01-检查检验记录",
+        "max_element_seq": 17
+      },
+      "MEDTECH_RIS_REPORT": {
+        "seq_no": 45,
+        "category_id": "winning-plat-01-检查检验记录",
+        "max_element_seq": 73
+      },
+      "MEDTECH_RIS_ITEM": {
+        "seq_no": 46,
+        "category_id": "winning-plat-01-检查检验记录",
+        "max_element_seq": 18
+      },
+      "PE_REPORT": {
+        "seq_no": 47,
+        "category_id": "winning-plat-01-体检信息",
+        "max_element_seq": 47
+      },
+      "PE_RSLT": {
+        "seq_no": 48,
+        "category_id": "winning-plat-01-体检信息",
+        "max_element_seq": 16
+      },
+      "PE_RSLT_DETAIL": {
+        "seq_no": 49,
+        "category_id": "winning-plat-01-体检信息",
+        "max_element_seq": 15
+      },
+      "PE_REPORT_DISEASE": {
+        "seq_no": 50,
+        "category_id": "winning-plat-01-体检信息",
+        "max_element_seq": 15
+      },
+      "OPERATION_RECORD": {
+        "seq_no": 51,
+        "category_id": "winning-plat-01-手术输血记录",
+        "max_element_seq": 67
+      },
+      "BLD_TRAN_RECORD": {
+        "seq_no": 52,
+        "category_id": "winning-plat-01-手术输血记录",
+        "max_element_seq": 67
+      },
+      "BLD_INVENTORY": {
+        "seq_no": 53,
+        "category_id": "winning-plat-01-手术输血记录",
+        "max_element_seq": 19
+      },
+      "BLD_TRAN_AR": {
+        "seq_no": 54,
+        "category_id": "winning-plat-01-手术输血记录",
+        "max_element_seq": 34
+      },
+      "EMR_TREATMENT": {
+        "seq_no": 55,
+        "category_id": "winning-plat-01-一般治疗处置记录",
+        "max_element_seq": 46
+      },
+      "EMR_TREATMENT_DRUG": {
+        "seq_no": 56,
+        "category_id": "winning-plat-01-一般治疗处置记录",
+        "max_element_seq": 17
+      },
+      "EMR_ANES_PRE_VISIT": {
+        "seq_no": 57,
+        "category_id": "winning-plat-01-一般治疗处置记录",
+        "max_element_seq": 59
+      },
+      "EMR_ANES_RECORD": {
+        "seq_no": 58,
+        "category_id": "winning-plat-01-一般治疗处置记录",
+        "max_element_seq": 61
+      },
+      "EMR_ANES_SIGN": {
+        "seq_no": 59,
+        "category_id": "winning-plat-01-一般治疗处置记录",
+        "max_element_seq": 15
+      },
+      "EMR_ANES_DRUG": {
+        "seq_no": 60,
+        "category_id": "winning-plat-01-一般治疗处置记录",
+        "max_element_seq": 20
+      },
+      "EMR_ANES_POST_VISIT": {
+        "seq_no": 61,
+        "category_id": "winning-plat-01-一般治疗处置记录",
+        "max_element_seq": 39
+      },
+      "EMR_PREDLVR": {
+        "seq_no": 62,
+        "category_id": "winning-plat-01-助产记录",
+        "max_element_seq": 62
+      },
+      "EMR_VAGINA_DELIVERY": {
+        "seq_no": 63,
+        "category_id": "winning-plat-01-助产记录",
+        "max_element_seq": 93
+      },
+      "EMR_CESAREAN_SECTION": {
+        "seq_no": 64,
+        "category_id": "winning-plat-01-助产记录",
+        "max_element_seq": 86
+      },
+      "EMR_NURS_GENL": {
+        "seq_no": 65,
+        "category_id": "winning-plat-01-护理操作记录",
+        "max_element_seq": 62
+      },
+      "EMR_NURS_CRIT_ILL": {
+        "seq_no": 66,
+        "category_id": "winning-plat-01-护理操作记录",
+        "max_element_seq": 42
+      },
+      "EMR_NURS_OPERATION": {
+        "seq_no": 67,
+        "category_id": "winning-plat-01-护理操作记录",
+        "max_element_seq": 62
+      },
+      "EMR_NURS_IO_MONITOR": {
+        "seq_no": 68,
+        "category_id": "winning-plat-01-护理操作记录",
+        "max_element_seq": 53
+      },
+      "EMR_NURS_VITAL_SIGN": {
+        "seq_no": 69,
+        "category_id": "winning-plat-01-护理操作记录",
+        "max_element_seq": 36
+      },
+      "EMR_NURS_ADM_ASSESS": {
+        "seq_no": 70,
+        "category_id": "winning-plat-01-护理评估与计划",
+        "max_element_seq": 79
+      },
+      "EMR_NURS_CARE_PLAN": {
+        "seq_no": 71,
+        "category_id": "winning-plat-01-护理评估与计划",
+        "max_element_seq": 41
+      },
+      "EMR_NURS_DISCH_ASSESS": {
+        "seq_no": 72,
+        "category_id": "winning-plat-01-护理评估与计划",
+        "max_element_seq": 35
+      },
+      "EMR_CONSENT_OPERATION": {
+        "seq_no": 73,
+        "category_id": "winning-plat-01-知情告知信息",
+        "max_element_seq": 44
+      },
+      "EMR_CONSENT_ANES": {
+        "seq_no": 74,
+        "category_id": "winning-plat-01-知情告知信息",
+        "max_element_seq": 41
+      },
+      "EMR_CONSENT_BT": {
+        "seq_no": 75,
+        "category_id": "winning-plat-01-知情告知信息",
+        "max_element_seq": 38
+      },
+      "EMR_CONSENT_SPECIAL_EXAM": {
+        "seq_no": 76,
+        "category_id": "winning-plat-01-知情告知信息",
+        "max_element_seq": 34
+      },
+      "EMR_CONSENT_CRIT": {
+        "seq_no": 77,
+        "category_id": "winning-plat-01-知情告知信息",
+        "max_element_seq": 33
+      },
+      "EMR_CONSENT_OTHER": {
+        "seq_no": 78,
+        "category_id": "winning-plat-01-知情告知信息",
+        "max_element_seq": 35
+      },
+      "EMR_INP_ADM": {
+        "seq_no": 79,
+        "category_id": "winning-plat-01-入出院记录",
+        "max_element_seq": 109
+      },
+      "EMR_INP_DISCH_BRIEF": {
+        "seq_no": 80,
+        "category_id": "winning-plat-01-入出院记录",
+        "max_element_seq": 48
+      },
+      "EMR_INP24": {
+        "seq_no": 81,
+        "category_id": "winning-plat-01-入出院记录",
+        "max_element_seq": 65
+      },
+      "EMR_DEATH24": {
+        "seq_no": 82,
+        "category_id": "winning-plat-01-入出院记录",
+        "max_element_seq": 57
+      },
+      "EMR_PROG_FIRST": {
+        "seq_no": 83,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 44
+      },
+      "EMR_PROG_ROUND": {
+        "seq_no": 84,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 36
+      },
+      "EMR_PROG_DAILY": {
+        "seq_no": 85,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 32
+      },
+      "EMR_PROG_DIFF_CASE": {
+        "seq_no": 86,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 37
+      },
+      "EMR_PROG_SHIFT": {
+        "seq_no": 87,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 48
+      },
+      "EMR_PROG_TRANSFER": {
+        "seq_no": 88,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 57
+      },
+      "EMR_PROG_STAGE_SUMMARY": {
+        "seq_no": 89,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 48
+      },
+      "EMR_PROG_RESCUE": {
+        "seq_no": 90,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 41
+      },
+      "EMR_PROG_CONSULT": {
+        "seq_no": 91,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 46
+      },
+      "EMR_PROG_PREOP_SMRY": {
+        "seq_no": 92,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 46
+      },
+      "EMR_PROG_PREOP_DISCUSS": {
+        "seq_no": 93,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 48
+      },
+      "EMR_PROG_POSTOP_FIRST": {
+        "seq_no": 94,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 35
+      },
+      "EMR_PROG_DEATH": {
+        "seq_no": 95,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 39
+      },
+      "EMR_PROG_DEATH_DISCUSS": {
+        "seq_no": 96,
+        "category_id": "winning-plat-01-住院病程记录",
+        "max_element_seq": 37
+      },
+      "EMR_REFERRAL_RECORD": {
+        "seq_no": 97,
+        "category_id": "winning-plat-01-转诊（院）记录",
+        "max_element_seq": 55
+      },
+      "HD_TREATMENT": {
+        "seq_no": 98,
+        "category_id": "winning-plat-01-血液透析",
+        "max_element_seq": 49
+      },
+      "HD_PROCESS": {
+        "seq_no": 99,
+        "category_id": "winning-plat-01-血液透析",
+        "max_element_seq": 17
+      },
+      "HD_CLINIC_ORDER": {
+        "seq_no": 100,
+        "category_id": "winning-plat-01-血液透析",
+        "max_element_seq": 16
+      },
+      "HVC_USE_RECORD": {
+        "seq_no": 101,
+        "category_id": "winning-plat-01-高值耗材使用记录",
+        "max_element_seq": 32
+      },
+      "HAI_REPORT": {
+        "seq_no": 102,
+        "category_id": "winning-plat-01-院感信息",
+        "max_element_seq": 41
+      },
+      "AE_SERIOUS": {
+        "seq_no": 103,
+        "category_id": "winning-plat-01-不良事件",
+        "max_element_seq": 51
+      },
+      "AE_MEDICAL_SAFETY": {
+        "seq_no": 104,
+        "category_id": "winning-plat-01-不良事件",
+        "max_element_seq": 32
+      },
+      "AE_DRUG": {
+        "seq_no": 105,
+        "category_id": "winning-plat-01-不良事件",
+        "max_element_seq": 65
+      },
+      "CP_TREATMENT": {
+        "seq_no": 106,
+        "category_id": "winning-plat-01-临床路径",
+        "max_element_seq": 20
+      },
+      "CP_EXEC": {
+        "seq_no": 107,
+        "category_id": "winning-plat-01-临床路径",
+        "max_element_seq": 43
+      },
+      "CP_EXEC_SCHEDULE": {
+        "seq_no": 108,
+        "category_id": "winning-plat-01-临床路径",
+        "max_element_seq": 29
+      },
+      "CP_INP_RECORD": {
+        "seq_no": 109,
+        "category_id": "winning-plat-01-临床路径",
+        "max_element_seq": 35
+      },
+      "ORG_STATISTICAL": {
+        "seq_no": 110,
+        "category_id": "winning-plat-01-统计指标",
+        "max_element_seq": 15
+      },
+      "OUTP_STATISTICAL": {
+        "seq_no": 111,
+        "category_id": "winning-plat-01-统计指标",
+        "max_element_seq": 20
+      },
+      "INP_STATISTICAL": {
+        "seq_no": 112,
+        "category_id": "winning-plat-01-统计指标",
+        "max_element_seq": 21
+      }
+    },
+    "winning-plat-02": {
+      "RESIDENT_ARCHIVE": {
+        "seq_no": 113,
+        "category_id": "winning-plat-02-个人健康档案",
+        "max_element_seq": 203
+      },
+      "RESIDENT_ARCHIVE_DISEASE": {
+        "seq_no": 114,
+        "category_id": "winning-plat-02-个人健康档案",
+        "max_element_seq": 27
+      },
+      "RESIDENT_ARCHIVE_OPERATION": {
+        "seq_no": 115,
+        "category_id": "winning-plat-02-个人健康档案",
+        "max_element_seq": 24
+      },
+      "RESIDENT_ARCHIVE_INJURY": {
+        "seq_no": 116,
+        "category_id": "winning-plat-02-个人健康档案",
+        "max_element_seq": 24
+      },
+      "RESIDENT_ARCHIVE_BLD_TRAN": {
+        "seq_no": 117,
+        "category_id": "winning-plat-02-个人健康档案",
+        "max_element_seq": 28
+      },
+      "RESIDENT_ARCHIVE_FAM_HX": {
+        "seq_no": 118,
+        "category_id": "winning-plat-02-个人健康档案",
+        "max_element_seq": 22
+      },
+      "FAMILY_BASIC_INFO": {
+        "seq_no": 119,
+        "category_id": "winning-plat-02-家庭健康档案",
+        "max_element_seq": 62
+      },
+      "FAMILY_MEMBER_INFO": {
+        "seq_no": 120,
+        "category_id": "winning-plat-02-家庭健康档案",
+        "max_element_seq": 25
+      },
+      "PE_RECORD": {
+        "seq_no": 121,
+        "category_id": "winning-plat-02-成人健康体检",
+        "max_element_seq": 214
+      },
+      "PE_AUXILIARY": {
+        "seq_no": 122,
+        "category_id": "winning-plat-02-成人健康体检",
+        "max_element_seq": 75
+      },
+      "PE_ADMISSION": {
+        "seq_no": 123,
+        "category_id": "winning-plat-02-成人健康体检",
+        "max_element_seq": 26
+      },
+      "PE_FAMILYBED": {
+        "seq_no": 124,
+        "category_id": "winning-plat-02-成人健康体检",
+        "max_element_seq": 28
+      },
+      "PE_DRUG": {
+        "seq_no": 125,
+        "category_id": "winning-plat-02-成人健康体检",
+        "max_element_seq": 31
+      },
+      "PE_VACCINATION": {
+        "seq_no": 126,
+        "category_id": "winning-plat-02-成人健康体检",
+        "max_element_seq": 25
+      },
+      "PE_OCC_HAZARDS": {
+        "seq_no": 127,
+        "category_id": "winning-plat-02-成人健康体检",
+        "max_element_seq": 23
+      },
+      "PE_TCM": {
+        "seq_no": 128,
+        "category_id": "winning-plat-02-成人健康体检",
+        "max_element_seq": 24
+      },
+      "PE_OSTEOPOROSIS": {
+        "seq_no": 129,
+        "category_id": "winning-plat-02-成人健康体检",
+        "max_element_seq": 48
+      },
+      "SIGN_TEAM": {
+        "seq_no": 130,
+        "category_id": "winning-plat-02-家庭医生签约",
+        "max_element_seq": 31
+      },
+      "SIGN_TEAM_MEMBER": {
+        "seq_no": 131,
+        "category_id": "winning-plat-02-家庭医生签约",
+        "max_element_seq": 38
+      },
+      "SIGN_DR": {
+        "seq_no": 132,
+        "category_id": "winning-plat-02-家庭医生签约",
+        "max_element_seq": 29
+      },
+      "SIGN_SERVICE_PACKAGE": {
+        "seq_no": 133,
+        "category_id": "winning-plat-02-家庭医生签约",
+        "max_element_seq": 35
+      },
+      "SIGN_SERVICE_ITEM": {
+        "seq_no": 134,
+        "category_id": "winning-plat-02-家庭医生签约",
+        "max_element_seq": 28
+      },
+      "SIGN_RECORD": {
+        "seq_no": 135,
+        "category_id": "winning-plat-02-家庭医生签约",
+        "max_element_seq": 71
+      },
+      "SIGN_RECORD_SERVICE_ITEM": {
+        "seq_no": 136,
+        "category_id": "winning-plat-02-家庭医生签约",
+        "max_element_seq": 35
+      },
+      "SIGN_FULFILLMENT_RECORD": {
+        "seq_no": 137,
+        "category_id": "winning-plat-02-家庭医生签约",
+        "max_element_seq": 31
+      },
+      "EDU_INDIVIDUAL_RECORD": {
+        "seq_no": 138,
+        "category_id": "winning-plat-02-健康教育",
+        "max_element_seq": 33
+      },
+      "EDU_GROUP_ACTIVITY_RECORD": {
+        "seq_no": 139,
+        "category_id": "winning-plat-02-健康教育",
+        "max_element_seq": 39
+      },
+      "VAC_RECORD": {
+        "seq_no": 140,
+        "category_id": "winning-plat-02-预防接种",
+        "max_element_seq": 97
+      },
+      "DM_ARCHIVE": {
+        "seq_no": 141,
+        "category_id": "winning-plat-02-2型糖尿病",
+        "max_element_seq": 49
+      },
+      "DM_FOLLOWUP": {
+        "seq_no": 142,
+        "category_id": "winning-plat-02-2型糖尿病",
+        "max_element_seq": 102
+      },
+      "DM_FOLLOWUP_DRUG": {
+        "seq_no": 143,
+        "category_id": "winning-plat-02-2型糖尿病",
+        "max_element_seq": 31
+      },
+      "HTN_ARCHIVE": {
+        "seq_no": 144,
+        "category_id": "winning-plat-02-高血压",
+        "max_element_seq": 48
+      },
+      "HTN_FOLLOWUP": {
+        "seq_no": 145,
+        "category_id": "winning-plat-02-高血压",
+        "max_element_seq": 76
+      },
+      "HTN_FOLLOWUP_DRUG": {
+        "seq_no": 146,
+        "category_id": "winning-plat-02-高血压",
+        "max_element_seq": 31
+      },
+      "HLD_ARCHIVE": {
+        "seq_no": 147,
+        "category_id": "winning-plat-02-高血脂",
+        "max_element_seq": 74
+      },
+      "HLD_FOLLOWUP": {
+        "seq_no": 148,
+        "category_id": "winning-plat-02-高血脂",
+        "max_element_seq": 112
+      },
+      "PSY_ARCHIVE": {
+        "seq_no": 149,
+        "category_id": "winning-plat-02-重性精神病",
+        "max_element_seq": 112
+      },
+      "PSY_FOLLOWUP": {
+        "seq_no": 150,
+        "category_id": "winning-plat-02-重性精神病",
+        "max_element_seq": 97
+      },
+      "PSY_FOLLOWUP_DRUG": {
+        "seq_no": 151,
+        "category_id": "winning-plat-02-重性精神病",
+        "max_element_seq": 31
+      },
+      "PSY_FOLLOWUP_EXAM": {
+        "seq_no": 152,
+        "category_id": "winning-plat-02-重性精神病",
+        "max_element_seq": 27
+      },
+      "PSY_FOLLOWUP_DRUGGUIDE": {
+        "seq_no": 153,
+        "category_id": "winning-plat-02-重性精神病",
+        "max_element_seq": 29
+      },
+      "ELDER_FOLLOWUP": {
+        "seq_no": 154,
+        "category_id": "winning-plat-02-老年人健康管理",
+        "max_element_seq": 99
+      },
+      "ELDER_FOLLOWUP_DRUG": {
+        "seq_no": 155,
+        "category_id": "winning-plat-02-老年人健康管理",
+        "max_element_seq": 28
+      },
+      "ELDER_SELFCARE_ASSESS": {
+        "seq_no": 156,
+        "category_id": "winning-plat-02-老年人健康管理",
+        "max_element_seq": 32
+      },
+      "ELDER_TCM": {
+        "seq_no": 157,
+        "category_id": "winning-plat-02-老年人健康管理",
+        "max_element_seq": 74
+      },
+      "CAD_ARCHIVE": {
+        "seq_no": 158,
+        "category_id": "winning-plat-02-冠心病",
+        "max_element_seq": 96
+      },
+      "CAD_ANNUAL_REVIEW": {
+        "seq_no": 159,
+        "category_id": "winning-plat-02-冠心病",
+        "max_element_seq": 32
+      },
+      "CAD_FOLLOWUP": {
+        "seq_no": 160,
+        "category_id": "winning-plat-02-冠心病",
+        "max_element_seq": 59
+      },
+      "CAD_FOLLOWUP_DRUG": {
+        "seq_no": 161,
+        "category_id": "winning-plat-02-冠心病",
+        "max_element_seq": 29
+      },
+      "STROKE_ARCHIVE": {
+        "seq_no": 162,
+        "category_id": "winning-plat-02-脑卒中",
+        "max_element_seq": 105
+      },
+      "STROKE_MIDTERM_REVIEW": {
+        "seq_no": 163,
+        "category_id": "winning-plat-02-脑卒中",
+        "max_element_seq": 38
+      },
+      "STROKE_FOLLOWUP": {
+        "seq_no": 164,
+        "category_id": "winning-plat-02-脑卒中",
+        "max_element_seq": 72
+      },
+      "STROKE_FOLLOWUP_DRUG": {
+        "seq_no": 165,
+        "category_id": "winning-plat-02-脑卒中",
+        "max_element_seq": 29
+      },
+      "TB_ARCHIVE": {
+        "seq_no": 166,
+        "category_id": "winning-plat-02-肺结核",
+        "max_element_seq": 64
+      },
+      "TB_FOLLOWUP": {
+        "seq_no": 167,
+        "category_id": "winning-plat-02-肺结核",
+        "max_element_seq": 70
+      },
+      "COPD_ARCHIVE": {
+        "seq_no": 168,
+        "category_id": "winning-plat-02-慢阻肺",
+        "max_element_seq": 50
+      },
+      "COPD_FOLLOWUP": {
+        "seq_no": 169,
+        "category_id": "winning-plat-02-慢阻肺",
+        "max_element_seq": 75
+      },
+      "COPD_FOLLOWUP_DRUG": {
+        "seq_no": 170,
+        "category_id": "winning-plat-02-慢阻肺",
+        "max_element_seq": 29
+      },
+      "TUMOR_ARCHIVE": {
+        "seq_no": 171,
+        "category_id": "winning-plat-02-肿瘤",
+        "max_element_seq": 118
+      },
+      "TUMOR_FAM_HX": {
+        "seq_no": 172,
+        "category_id": "winning-plat-02-肿瘤",
+        "max_element_seq": 23
+      },
+      "TUMOR_FOLLOWUP_FIRST": {
+        "seq_no": 173,
+        "category_id": "winning-plat-02-肿瘤",
+        "max_element_seq": 55
+      },
+      "TUMOR_FOLLOWUP": {
+        "seq_no": 174,
+        "category_id": "winning-plat-02-肿瘤",
+        "max_element_seq": 54
+      },
+      "DEATH_CERTIFICATE": {
+        "seq_no": 175,
+        "category_id": "winning-plat-02-死亡医学证明",
+        "max_element_seq": 93
+      },
+      "REPORT_INFECTIOUS_DISEASE": {
+        "seq_no": 176,
+        "category_id": "winning-plat-02-传染病及突发公卫事件报告",
+        "max_element_seq": 65
+      },
+      "REPORT_OCCUP_DISEASE": {
+        "seq_no": 177,
+        "category_id": "winning-plat-02-传染病及突发公卫事件报告",
+        "max_element_seq": 126
+      },
+      "REPORT_FOODBORNE_DISEASE": {
+        "seq_no": 178,
+        "category_id": "winning-plat-02-传染病及突发公卫事件报告",
+        "max_element_seq": 71
+      },
+      "HEALTH_SUPERVISION_INFO": {
+        "seq_no": 179,
+        "category_id": "winning-plat-02-卫生监督协管",
+        "max_element_seq": 26
+      },
+      "HEALTH_SUPERVISION_PATROL": {
+        "seq_no": 180,
+        "category_id": "winning-plat-02-卫生监督协管",
+        "max_element_seq": 27
+      },
+      "PUBLIC_HEALTH_STATISTICAL": {
+        "seq_no": 182,
+        "category_id": "winning-plat-02-统计指标",
+        "max_element_seq": 16
+      }
+    },
+    "winning-plat-03": {
+      "POPULATION_CASE": {
+        "seq_no": 181,
+        "category_id": "winning-plat-03-全员人口个案",
+        "max_element_seq": 60
+      },
+      "POPULATION_CHILD": {
+        "seq_no": 182,
+        "category_id": "winning-plat-03-妇女生育史",
+        "max_element_seq": 27
+      },
+      "POPULATION_REPROD_EXAM": {
+        "seq_no": 184,
+        "category_id": "winning-plat-03-妇女生育史",
+        "max_element_seq": 20
+      },
+      "POPULATION_LOW_INCOME": {
+        "seq_no": 185,
+        "category_id": "winning-plat-03-低收入人口",
+        "max_element_seq": 44
+      }
+    },
+    "winning-plat-04": {
+      "PN_ARCHIVE": {
+        "seq_no": 186,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 163
+      },
+      "PN_FOLLOWUP_FIRST": {
+        "seq_no": 187,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 103
+      },
+      "PN_FOLLOWUP": {
+        "seq_no": 188,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 49
+      },
+      "PN_PRENATAL_SCREEN_DIAG": {
+        "seq_no": 189,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 34
+      },
+      "PN_HIGHRISK_PREGNANT": {
+        "seq_no": 190,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 28
+      },
+      "PN_HIGHRISK_SCREEN": {
+        "seq_no": 191,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 31
+      },
+      "PN_HIGHRISK_FOLLOWUP": {
+        "seq_no": 192,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 30
+      },
+      "PN_DELIVERY": {
+        "seq_no": 193,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 62
+      },
+      "PN_DELIVERY_BABY": {
+        "seq_no": 194,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 58
+      },
+      "PN_FOLLOWUP_PARTUM": {
+        "seq_no": 195,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 57
+      },
+      "PN_FOLLOWUP_FORTYTWO": {
+        "seq_no": 196,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 58
+      },
+      "PN_DEATH_REPORT": {
+        "seq_no": 197,
+        "category_id": "winning-plat-04-孕产妇健康管理",
+        "max_element_seq": 134
+      },
+      "CH_ARCHIVE": {
+        "seq_no": 198,
+        "category_id": "winning-plat-04-儿童健康管理",
+        "max_element_seq": 111
+      },
+      "CH_DISEASE_SCREEN": {
+        "seq_no": 199,
+        "category_id": "winning-plat-04-儿童健康管理",
+        "max_element_seq": 34
+      },
+      "CH_BIRTH_CERTIFICATE": {
+        "seq_no": 200,
+        "category_id": "winning-plat-04-儿童健康管理",
+        "max_element_seq": 95
+      },
+      "CH_VISIT": {
+        "seq_no": 201,
+        "category_id": "winning-plat-04-儿童健康管理",
+        "max_element_seq": 103
+      },
+      "CH_BIRTH_DEFECTS_RECORD": {
+        "seq_no": 202,
+        "category_id": "winning-plat-04-儿童健康管理",
+        "max_element_seq": 134
+      },
+      "CH_HIGHRISK_REGISTER": {
+        "seq_no": 203,
+        "category_id": "winning-plat-04-儿童健康管理",
+        "max_element_seq": 35
+      },
+      "CH_DEATH_REPORT": {
+        "seq_no": 204,
+        "category_id": "winning-plat-04-儿童健康管理",
+        "max_element_seq": 72
+      },
+      "CH_EXAMINATION": {
+        "seq_no": 205,
+        "category_id": "winning-plat-04-儿童健康管理",
+        "max_element_seq": 117
+      },
+      "CH_TCM_MANAGE": {
+        "seq_no": 206,
+        "category_id": "winning-plat-04-儿童健康管理",
+        "max_element_seq": 28
+      }
+    },
+    "winning-plat-05": {
+      "HRP_HUMAN": {
+        "seq_no": 207,
+        "category_id": "winning-plat-05-人力资源",
+        "max_element_seq": 79
+      },
+      "HRP_HUMAN_EDU": {
+        "seq_no": 208,
+        "category_id": "winning-plat-05-人力资源",
+        "max_element_seq": 17
+      },
+      "HRP_HUMAN_WORK": {
+        "seq_no": 209,
+        "category_id": "winning-plat-05-人力资源",
+        "max_element_seq": 14
+      },
+      "HRP_HUMAN_DEPLOY_WORK": {
+        "seq_no": 210,
+        "category_id": "winning-plat-05-人力资源",
+        "max_element_seq": 14
+      },
+      "HRP_HUMAN_AWARDS": {
+        "seq_no": 211,
+        "category_id": "winning-plat-05-人力资源",
+        "max_element_seq": 14
+      },
+      "HRP_HUMAN_RESEARCH": {
+        "seq_no": 212,
+        "category_id": "winning-plat-05-人力资源",
+        "max_element_seq": 10
+      },
+      "HRP_FI_BALANCE": {
+        "seq_no": 213,
+        "category_id": "winning-plat-05-财务",
+        "max_element_seq": 18
+      },
+      "HRP_FI_INCOME_EXPENSE": {
+        "seq_no": 214,
+        "category_id": "winning-plat-05-财务",
+        "max_element_seq": 18
+      },
+      "HRP_FI_MED_REVENUE": {
+        "seq_no": 215,
+        "category_id": "winning-plat-05-财务",
+        "max_element_seq": 18
+      },
+      "HRP_FI_CASH_FLOW": {
+        "seq_no": 216,
+        "category_id": "winning-plat-05-财务",
+        "max_element_seq": 20
+      },
+      "HRP_FI_BUDGET": {
+        "seq_no": 217,
+        "category_id": "winning-plat-05-财务",
+        "max_element_seq": 20
+      },
+      "HRP_SUPPLIES_RECEIVING": {
+        "seq_no": 218,
+        "category_id": "winning-plat-05-物资耗材",
+        "max_element_seq": 50
+      },
+      "HRP_SUPPLIES_ISSUANCE": {
+        "seq_no": 219,
+        "category_id": "winning-plat-05-物资耗材",
+        "max_element_seq": 44
+      },
+      "HRP_SUPPLIES_REQUEST": {
+        "seq_no": 220,
+        "category_id": "winning-plat-05-物资耗材",
+        "max_element_seq": 28
+      },
+      "HRP_SUPPLIES_BALANCE": {
+        "seq_no": 221,
+        "category_id": "winning-plat-05-物资耗材",
+        "max_element_seq": 25
+      },
+      "HRP_ASSET": {
+        "seq_no": 222,
+        "category_id": "winning-plat-05-固定资产",
+        "max_element_seq": 29
+      },
+      "HRP_ASSET_DEPRECIATION": {
+        "seq_no": 223,
+        "category_id": "winning-plat-05-固定资产",
+        "max_element_seq": 22
+      },
+      "HRP_ASSET_CHANGE": {
+        "seq_no": 224,
+        "category_id": "winning-plat-05-固定资产",
+        "max_element_seq": 18
+      },
+      "HRP_ASSET_DISPOSAL": {
+        "seq_no": 225,
+        "category_id": "winning-plat-05-固定资产",
+        "max_element_seq": 18
+      },
+      "HRP_DRUG_INVENTORY": {
+        "seq_no": 226,
+        "category_id": "winning-plat-05-药品管理",
+        "max_element_seq": 45
+      },
+      "HRP_DRUG_RECEIVING": {
+        "seq_no": 227,
+        "category_id": "winning-plat-05-药品管理",
+        "max_element_seq": 38
+      },
+      "HRP_DRUG_ISSUANCE": {
+        "seq_no": 228,
+        "category_id": "winning-plat-05-药品管理",
+        "max_element_seq": 34
+      },
+      "HRP_DRUG_REQUEST": {
+        "seq_no": 229,
+        "category_id": "winning-plat-05-药品管理",
+        "max_element_seq": 16
+      },
+      "HRP_DRUG_MFR": {
+        "seq_no": 230,
+        "category_id": "winning-plat-05-药品管理",
+        "max_element_seq": 19
+      },
+      "HRP_DRUG_PRICE_ADJUST": {
+        "seq_no": 231,
+        "category_id": "winning-plat-05-药品管理",
+        "max_element_seq": 31
+      }
+    },
+    "winning-plat-06": {
+      "OUTP_PRESCRIBED_EXTRACT": {
+        "seq_no": 232,
+        "category_id": "winning-plat-06-处方点评",
+        "max_element_seq": 14
+      },
+      "OUTP_PRESCRIBED_COMMENT": {
+        "seq_no": 233,
+        "category_id": "winning-plat-06-处方点评",
+        "max_element_seq": 41
+      },
+      "INP_PRESCRIBED_EXTRACT": {
+        "seq_no": 234,
+        "category_id": "winning-plat-06-处方点评",
+        "max_element_seq": 14
+      },
+      "INP_PRESCRIBED_COMMENT": {
+        "seq_no": 235,
+        "category_id": "winning-plat-06-处方点评",
+        "max_element_seq": 43
+      }
+    },
+    "winning-plat-07": {
+      "TELEMED_CONSULT": {
+        "seq_no": 236,
+        "category_id": "winning-plat-07-远程会诊",
+        "max_element_seq": 40
+      },
+      "TELEMED_CONSULT_INVITEE": {
+        "seq_no": 237,
+        "category_id": "winning-plat-07-远程会诊",
+        "max_element_seq": 13
+      },
+      "TELEMED_LAB": {
+        "seq_no": 238,
+        "category_id": "winning-plat-07-远程检验",
+        "max_element_seq": 58
+      },
+      "TELEMED_LAB_DETAIL": {
+        "seq_no": 239,
+        "category_id": "winning-plat-07-远程检验",
+        "max_element_seq": 20
+      },
+      "TELEMED_RAD": {
+        "seq_no": 240,
+        "category_id": "winning-plat-07-远程影像",
+        "max_element_seq": 60
+      },
+      "TELEMED_RAD_INVITEE": {
+        "seq_no": 241,
+        "category_id": "winning-plat-07-远程影像",
+        "max_element_seq": 13
+      },
+      "TELEMED_ECG": {
+        "seq_no": 242,
+        "category_id": "winning-plat-07-远程心电",
+        "max_element_seq": 53
+      },
+      "TELEMED_ECG_INVITEE": {
+        "seq_no": 243,
+        "category_id": "winning-plat-07-远程心电",
+        "max_element_seq": 13
+      },
+      "TELEMED_PATHOL": {
+        "seq_no": 244,
+        "category_id": "winning-plat-07-远程病理",
+        "max_element_seq": 55
+      },
+      "TELEMED_PATHOL_INVITEE": {
+        "seq_no": 245,
+        "category_id": "winning-plat-07-远程病理",
+        "max_element_seq": 13
+      },
+      "TELEMED_REF": {
+        "seq_no": 246,
+        "category_id": "winning-plat-07-双向转诊",
+        "max_element_seq": 45
+      },
+      "TELEMED_REF_FLOW": {
+        "seq_no": 247,
+        "category_id": "winning-plat-07-双向转诊",
+        "max_element_seq": 16
+      }
+    }
+  }
+}

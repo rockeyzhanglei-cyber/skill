@@ -9,6 +9,55 @@ from datetime import datetime
 from typing import Dict, List
 
 
+def _fmt_value_domain(value_domains, limit: int = 20) -> str:
+    """把 ValueDomain 列表渲染成 'code[含义]; code[含义]' 形式，超长截断。"""
+    if not value_domains:
+        return ""
+    items = []
+    for vd in value_domains:
+        code = getattr(vd, 'code', '') or ''
+        name = getattr(vd, 'name', '') or ''
+        if not code and not name:
+            continue
+        items.append(f"{code}[{name}]" if code else name)
+        if len(items) >= limit:
+            break
+    if not items:
+        return ""
+    more = "" if len(value_domains) <= limit else "…"
+    return "".join(items) + more
+
+
+def _build_source_lookup(source_doc):
+    """构建 原标准表 查找表：英文名、中文名、去'表'归一化名 都映射到表对象。"""
+    lookup = {}
+    if not source_doc:
+        return lookup
+    for t in source_doc.tables:
+        lookup[t.name] = t
+        if t.chinese_name:
+            lookup[t.chinese_name] = t
+            norm = t.chinese_name.replace('表', '').strip()
+            if norm:
+                lookup[norm] = t
+    return lookup
+
+
+def _resolve_table(lookup, name):
+    """按英文名/中文名/归一化名解析表对象，支持模糊包含匹配。"""
+    if not name or not lookup:
+        return None
+    if name in lookup:
+        return lookup[name]
+    norm = name.replace('表', '').strip()
+    if norm in lookup:
+        return lookup[norm]
+    for k, t in lookup.items():
+        if isinstance(k, str) and k and (k in name or name in k):
+            return t
+    return None
+
+
 class HTMLReporter:
     """HTML报告生成器"""
 
@@ -16,7 +65,8 @@ class HTMLReporter:
         self.config = config or {}
 
     def generate(self, results: Dict, output_path: str, title: str = "数据模型比对报告",
-                 target_doc=None, source_doc=None):
+                 target_doc=None, source_doc=None, source_name: str = None,
+                 target_name: str = None):
         """生成HTML报告
 
         Args:
@@ -25,7 +75,21 @@ class HTMLReporter:
             title: 报告标题
             target_doc: 目标标准标准化文档
             source_doc: 原标准标准化文档
+            source_name: 原标准名称（用于表头，默认从 title 解析）
+            target_name: 目标标准名称（用于表头，默认从 title 解析）
         """
+        # 从标题推导标准名称（避免把版本号写死在代码里，例如误写成 v5.5）
+        if source_name is None or target_name is None:
+            base = title
+            if base.endswith('数据模型比对报告'):
+                base = base[:-len('数据模型比对报告')].strip()
+            if ' vs ' in base:
+                a, b = base.split(' vs ', 1)
+                source_name = source_name or a.strip()
+                target_name = target_name or b.strip()
+            else:
+                source_name = source_name or '原标准'
+                target_name = target_name or '目标标准'
 
         # 统计数据
         total_fields = len(results['matched']) + len(results['modified_fields']) + len(results['new_fields'])
@@ -73,6 +137,7 @@ class HTMLReporter:
         if source_doc:
             for table in source_doc.tables:
                 source_table_index[table.name] = table
+        source_table_lookup = _build_source_lookup(source_doc)
 
         # 构建比对结果索引
         matched_index = {}  # (table_name, field_name) -> match_result
@@ -365,6 +430,7 @@ tr:hover {{ filter: brightness(0.95); }}
         if source_doc:
             for table in source_doc.tables:
                 source_table_index[table.name] = table
+        source_table_lookup = _build_source_lookup(source_doc)
 
         # 构建比对结果索引
         matched_index = {}  # (table_name, field_name) -> match_result
@@ -548,9 +614,9 @@ tr:hover {{ filter: brightness(0.95); }}
 <thead>
 <tr>
 <th rowspan="2" style="width:3%">#</th>
-<th colspan="4" style="background:#2e7d32;text-align:center;width:42%">目标标准（省平台v1.4.1）</th>
+<th colspan="4" style="background:#2e7d32;text-align:center;width:42%">目标标准（{target_name}）</th>
 <th rowspan="2" style="width:15%">比对结果</th>
-<th colspan="4" style="background:#e65100;text-align:center;width:42%">原标准（云南区域v5.5）</th>
+<th colspan="4" style="background:#e65100;text-align:center;width:42%">原标准（{source_name}）</th>
 </tr>
 <tr>
 <th style="background:#388e3c;width:10%">字段名</th>
@@ -595,27 +661,33 @@ tr:hover {{ filter: brightness(0.95); }}
                         else:
                             type_length_constraint = f"{field_data_type}/{field_length}/{field_constraint}" if field_data_type else f"{field_length}/{field_constraint}"
                         desc_display = field_description
-                        value_domain = ""
+
+                        # 从new_fields中查找该字段的推荐字段名
+                        new_field_info = next((nf for nf in results['new_fields']
+                                              if nf.get('table_name') == table_name and nf.get('name') == field_name), None)
+                        value_domain = _fmt_value_domain(new_field_info.get('value_domains', []) if new_field_info else [])
 
                         result_cell = '<span class="status-tag status-red">🔴 新增</span>'
 
                         # 原标准区域：红色加粗字体
                         if generated_table_name and field_chinese_name:
-                            # 从new_fields中查找该字段的推荐字段名
-                            new_field_info = next((nf for nf in results['new_fields']
-                                                  if nf.get('table_name') == table_name and nf.get('name') == field_name), None)
                             generated_field_name = new_field_info.get('generated_name', '') if new_field_info else ''
 
                             if generated_field_name:
+                                vd_str = _fmt_value_domain(new_field_info.get('value_domains', []) if new_field_info else [])
                                 if table_chinese:
-                                    source_display = f"<span style='color:red;font-weight:bold'>{table_chinese}[{generated_table_name}].{field_chinese_name}[{generated_field_name}]</span>"
+                                    source_display = f"<span style='color:red;font-weight:bold'>{table_chinese}[{generated_table_name}].{field_chinese_name}</span>"
+                                    if vd_str:
+                                        source_display += f"（值域：{vd_str}）"
                                     if field_format:
                                         source_type_length = f"<span style='color:red;font-weight:bold'>{field_data_type}/{field_format}/{field_constraint}</span>" if field_data_type else f"<span style='color:red;font-weight:bold'>{field_format}/{field_constraint}</span>"
                                     else:
                                         source_type_length = f"<span style='color:red;font-weight:bold'>{field_data_type}/{field_length}/{field_constraint}</span>" if field_data_type else f"<span style='color:red;font-weight:bold'>{field_length}/{field_constraint}</span>"
                                     source_desc = f"<span style='color:red;font-weight:bold'>{field_description}</span>" if field_description else ''
                                 else:
-                                    source_display = f"<span style='color:red;font-weight:bold'>{generated_table_name}.{field_chinese_name}[{generated_field_name}]</span>"
+                                    source_display = f"<span style='color:red;font-weight:bold'>{generated_table_name}.{field_chinese_name}</span>"
+                                    if vd_str:
+                                        source_display += f"（值域：{vd_str}）"
                                     if field_format:
                                         source_type_length = f"<span style='color:red;font-weight:bold'>{field_data_type}/{field_format}/{field_constraint}</span>" if field_data_type else f"<span style='color:red;font-weight:bold'>{field_format}/{field_constraint}</span>"
                                     else:
@@ -676,6 +748,7 @@ tr:hover {{ filter: brightness(0.95); }}
                         source_field_name = match.get('source_field', '')
                         source_field_chinese = match.get('source_comment', '')
                         source_field_type = ''
+                        source_field_value_domains = []
                         source_field_length = ''
                         source_field_constraint = ''
                         source_field_description = ''
@@ -690,6 +763,7 @@ tr:hover {{ filter: brightness(0.95); }}
                                     source_field_constraint = sf.constraint
                                     source_field_description = sf.description
                                     source_field_format = sf.format if hasattr(sf, 'format') else ''
+                                    source_field_value_domains = getattr(sf, 'value_domains', None) or []
                                     break
 
                         # 根据match_type显示不同的状态标签（含具体匹配策略）
@@ -706,6 +780,7 @@ tr:hover {{ filter: brightness(0.95); }}
                             'semantic': '🟢 满足(语义)',
                             'keyword': '🟢 满足(关键词)',
                             'cross_table': '🟢 满足(跨表)',
+                            'stale_kb_待核对': '🟡 待人工核对',
                         }
                         label = _match_labels.get(match_type, '🟢 满足')
                         result_cell = f'<span class="status-tag status-green">{label}</span>'
@@ -726,6 +801,12 @@ tr:hover {{ filter: brightness(0.95); }}
                             field_cn = source_field_chinese if source_field_chinese else source_field_name
                             field_en = source_field_name
                             source_field_display = f"{table_cn}[{table_en}].{field_cn}[{field_en}]"
+                            vd_str = _fmt_value_domain(source_field_value_domains)
+                            if vd_str:
+                                source_field_display += f"（值域：{vd_str}）"
+                            cond_disp = match.get('condition_display', '')
+                            if cond_disp:
+                                source_field_display += f"（{cond_disp}）"
                         elif source_field_name:
                             source_field_display = f"-[{source_field_name}]"
                         else:
@@ -740,7 +821,7 @@ tr:hover {{ filter: brightness(0.95); }}
                         else:
                             source_type_length_constraint = f"{source_field_type}/{source_field_length}/{source_field_constraint}" if source_field_type else ""
                         # 值域（如果有）
-                        value_domain = ""
+                        value_domain = _fmt_value_domain(source_field_value_domains)
 
                         html += f"""<tr class="row-green">
 <td>{row_num}</td>
@@ -766,6 +847,7 @@ tr:hover {{ filter: brightness(0.95); }}
                         source_field_name = mod.get('source_field', '')
                         source_field_chinese = mod.get('source_comment', '')
                         source_field_type = ''
+                        source_field_value_domains = []
                         source_field_length = ''
                         source_field_constraint = ''
                         source_field_description = ''
@@ -782,6 +864,7 @@ tr:hover {{ filter: brightness(0.95); }}
                                     source_field_constraint = sf.constraint
                                     source_field_description = sf.description
                                     source_field_format = sf.format if hasattr(sf, 'format') else ''
+                                    source_field_value_domains = getattr(sf, 'value_domains', None) or []
                                     break
 
                         # 使用中文描述修改内容，包含格式信息
@@ -827,6 +910,12 @@ tr:hover {{ filter: brightness(0.95); }}
                             field_cn = source_field_chinese if source_field_chinese else source_field_name
                             field_en = source_field_name
                             source_field_display = f"{table_cn}[{table_en}].{field_cn}[{field_en}]"
+                            vd_str = _fmt_value_domain(source_field_value_domains)
+                            if vd_str:
+                                source_field_display += f"（值域：{vd_str}）"
+                            cond_disp = mod.get('condition_display', '')
+                            if cond_disp:
+                                source_field_display += f"（{cond_disp}）"
                         elif source_field_name:
                             source_field_display = f"-[{source_field_name}]"
                         else:
@@ -841,7 +930,7 @@ tr:hover {{ filter: brightness(0.95); }}
                         else:
                             source_type_length_constraint = f"{source_field_type}/{source_field_length}/{source_field_constraint}" if source_field_type else ""
                         # 值域（如果有）
-                        value_domain = ""
+                        value_domain = _fmt_value_domain(source_field_value_domains)
 
                         html += f"""<tr class="row-orange">
 <td>{row_num}</td>
@@ -868,6 +957,8 @@ tr:hover {{ filter: brightness(0.95); }}
                         generated_name = new.get('generated_name', '') if new else ''
                         # 优先使用source_table_name（源标准表名），如果没有则使用new_field_target
                         new_field_target = new.get('source_table_name', new.get('new_field_target', new.get('table_name', ''))) if new else ''
+                        # 新增字段的值域（来自比对结果）
+                        vd_new = new.get('value_domains', []) if new else []
 
                         # 从new字段信息获取类型、长度、约束、说明、格式（优先使用new中的信息）
                         field_type = new.get('type', field_data_type) if new else field_data_type
@@ -880,15 +971,22 @@ tr:hover {{ filter: brightness(0.95); }}
                             field_desc = new.get('comment', '')
 
                         # 构建原标准对应字段显示（红色标注）
-                        if new_field_target and generated_name:
-                            # 从source_table_index获取原标准表的中文名
-                            source_table_obj = source_table_index.get(new_field_target) if source_table_index else None
-                            source_table_cn = ''
-                            if source_table_obj:
-                                source_table_cn = getattr(source_table_obj, 'chinese_name', '') or ''
-
-                            # 构建显示格式：表名[表英文名].字段中文名[字段英文名]
-                            source_display = f"<span style='color:red;font-weight:bold'>{source_table_cn}[{new_field_target}].{field_chinese_name}[{generated_name}]</span>"
+                        # 新增字段：仅展示 表中文[表英文].字段中文，不需要英文字段名
+                        if new_field_target:
+                            tobj = _resolve_table(source_table_lookup, new_field_target)
+                            if tobj:
+                                tcn = tobj.chinese_name or new_field_target
+                                ten = tobj.name
+                            else:
+                                tcn = new_field_target
+                                ten = ''
+                            if ten:
+                                source_display = f"<span style='color:red;font-weight:bold'>{tcn}[{ten}].{field_chinese_name}</span>"
+                            else:
+                                source_display = f"<span style='color:red;font-weight:bold'>{tcn}.{field_chinese_name}</span>"
+                            vd_str = _fmt_value_domain(vd_new)
+                            if vd_str:
+                                source_display += f"（值域：{vd_str}）"
                             # 原标准区域的类型/长度/约束和说明也显示为红色加粗
                             if field_format:
                                 source_type_length = f"<span style='color:red;font-weight:bold'>{field_type}/{field_format}/{field_constraint}</span>" if field_type else f"<span style='color:red;font-weight:bold'>{field_format}/{field_constraint}</span>"
@@ -924,7 +1022,7 @@ tr:hover {{ filter: brightness(0.95); }}
                             type_length_constraint = f"{field_type}/{field_length}/{field_constraint}" if field_type else f"{field_length}/{field_constraint}"
                         desc_display = field_desc
                         # 值域（如果有）
-                        value_domain = ""
+                        value_domain = _fmt_value_domain(vd_new)
 
                         html += f"""<tr class="row-red">
 <td>{row_num}</td>

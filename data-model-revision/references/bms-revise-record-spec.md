@@ -2,6 +2,15 @@
 
 > **强制要求**：生成脚本前必须读取本文档，严格按照模板生成。
 > **参考来源**：`V20260626133554__insert_revise_record_228606.sql`（已验证可升级成功）
+> **Flyway 增量铁律**：所有脚本必须为**新增**的 `V{时间戳}__*.sql` 版本化文件，**禁止修改已存在的历史脚本**（含 DDL、修订记录、基础数据同步脚本）。`base_data/*__*.csv` 是**初始化种子、只读不可变**，初始化后基础数据变更一律走修订记录，绝不改动 CSV。**需求号必填**（见下方"需求号规则"）。详见 `bms-script-spec.md`。
+
+---
+
+## 0. 需求号规则（硬性，必填）
+
+- `edsm_revise_record.require_no`（以及文件名中的 `{需求号}`）**必须**填写真实**需求号**（如 `234683`），不得留空、不得用描述性文字（如"数据标准修订-增加记录状态字段"）代替。脚本头部**不写** `-- 需求:` 注释行。
+- 用户在对话中给出需求号直接用；**若生成修订记录时发现没有需求号，必须主动询问用户**，不要编造、不要跳过。缺需求号会导致修订记录无法与需求关联、无法追溯。
+- 已记录需求号（非穷举）：`234683`（STATUS 记录状态字段修订，CVA-0166）。
 
 ---
 
@@ -14,6 +23,25 @@ V{YYYYMMDDHHMMSS}__insert_revise_record_{需求号}.sql
 放置目录：`winning-dps-rda-bms-server/src/main/resources/system_sql/rhdp_app/postgresql/`
 
 ---
+
+## 1.1 头部注释格式（与 DDL 配套统一，唯一格式）
+
+修订记录脚本头部的"变更描述"与配套 DDL 脚本（`edsm_sql/{库}`）**逐字一致**。四类操作（加字段 / 加表 / 修改 / 删除）及值域修订的模板、字段项写法、批量排版，**全部唯一来源为 `bms-script-spec.md`《注释规范（DDL 与修订记录统一约束）》**。本规范不另立格式。
+
+**无论单条还是多条变更，统一用 `/* */` 编号清单**（与 DDL 顶部清单逐条逐字一致，含编号顺序、字段项形态）：
+
+```sql
+/*
+1. 科室信息[BASE_DEPARTMENT]新增字段：记录状态[STATUS,O,S3,N1]
+2. 医护人员信息表[BASE_EMPLOYEE]新增字段：记录状态[STATUS,O,S3,N1]
+*/
+```
+
+- 单条变更也写成 `/* 1. … */` 形式（不另用三行 `--` 式），与多条保持同一套写法，避免双格式。
+- **不写 `-- 集合:` / `-- 需求:` / `-- 字段:` / `-- 说明:` 等辅助注释行**：需求号仅体现于文件名与 `require_no` 列；字段类型/约束/值域等细节均放在 `revise_after` 的 JSON 内，不在头部以注释重复。
+- `edsm_revise_record.summary` **必须等于头部清单**：多条用 `\n` 连接（`1. xxx\n2. xxx`），单条即 `1. xxx`。禁止 summary 与头部清单措辞不同或顺序不同。
+- 字段类型 / 约束等细节放 `revise_after` 的 JSON 内，不在头部重复。
+- **一致性铁律**：DDL 与修订记录是同一标准修订的配套产物，两者变更清单条数、顺序、描述文字必须逐字一致，禁止"新增字段 / 增加字段"之类措辞漂移。唯一例外：标准动作与物理落地方式本就不同时（如标准侧 `isDel=1` vs DDL 侧改为非必填），主句仍须一致，仅括号内注明落地方式。
 
 ## 2. SQL模板总览
 
@@ -140,12 +168,14 @@ values('{uuid}','{revise_id}','valueSet','CVA-0308-01','add',null,'{"valueId": "
 
 ### 4.3 metadata（13个字段）
 
+> **external_id 生成规则见 external-id-spec.md**：必须由 generator 按规则自动填充，禁止留空 `""` 或手写随意值。
+
 ```json
 {
-  "metadataId": "winning-plat-02-FIELD_CODE",
+  "metadataId": "winning-plat-02-DATASET_CODE-FIELD_CODE",
   "namespaceId": "1",
   "externalId": "",
-  "metadataCode": "FIELD_CODE",
+  "metadataCode": "winning-plat-02-DATASET_CODE-FIELD_CODE",
   "metadataName": "字段中文名",
   "definition": "字段定义",
   "dataType": "S3",
@@ -162,17 +192,17 @@ values('{uuid}','{revise_id}','valueSet','CVA-0308-01','add',null,'{"valueId": "
 **对应SQL**：
 ```sql
 insert into edsm_revise_detail(revise_detail_id,revise_id,business_code,business_id,revise_type_code,revise_before,revise_after,is_del,created_at)
-values('{uuid}','{revise_id}','metadata','winning-plat-02-FIELD_CODE','add',null,'{"metadataId": "winning-plat-02-FIELD_CODE", "namespaceId": "1", "externalId": "", "metadataCode": "FIELD_CODE", "metadataName": "字段中文名", "definition": "字段定义", "dataType": "S3", "representationFormat": "AN..100", "codeSystemId": "CVA-0308", "allow": "", "status": 1, "isDel": 0, "createdAt": "2026-07-23T14:25:00", "modifiedAt": ""}',0,'2026-07-23T14:25:00');
+values('{uuid}','{revise_id}','metadata','winning-plat-02-DATASET_CODE-FIELD_CODE','add',null,'{"metadataId": "winning-plat-02-DATASET_CODE-FIELD_CODE", "namespaceId": "1", "externalId": "", "metadataCode": "winning-plat-02-DATASET_CODE-FIELD_CODE", "metadataName": "字段中文名", "definition": "字段定义", "dataType": "S3", "representationFormat": "AN..100", "codeSystemId": "CVA-0308", "allow": "", "status": 1, "isDel": 0, "createdAt": "2026-07-23T14:25:00", "modifiedAt": ""}',0,'2026-07-23T14:25:00');
 ```
 
 **字段说明**：
 
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
-| metadataId | String | `winning-plat-02-{字段代码}` |
+| metadataId | String | `winning-plat-02-{数据集代码}-{字段代码}`（= 元素唯一标识 element_id） |
 | namespaceId | String | 固定 `"1"` |
-| externalId | String | 外部标识符，无则 `""` |
-| metadataCode | String | 字段代码（数据库列名） |
+| externalId | String | 数据元标识符，**按 external-id-spec.md 规则自动生成**（HDS{标准2}{分类2}.{数据集3}.{元素3}），由 generator 填充，**禁止留空/手写** |
+| metadataCode | String | 数据集元素唯一标识（= `winning-plat-02-{数据集代码}-{字段代码}`，与 element_id 一致） |
 | metadataName | String | 字段中文名 |
 | definition | String | 字段定义说明 |
 | dataType | String | S1/S2/S3/N/L/D/T/DT/BY |
@@ -194,7 +224,7 @@ values('{uuid}','{revise_id}','metadata','winning-plat-02-FIELD_CODE','add',null
 {
   "elementId": "winning-plat-02-DATASET_CODE-element_code",
   "datasetId": "winning-plat-02-DATASET_CODE",
-  "metadataId": "winning-plat-02-METADATA_CODE",
+  "metadataId": "winning-plat-02-DATASET_CODE-element_code",
   "internalId": "",
   "elementCode": "element_code",
   "elementName": "元素中文名",
@@ -216,7 +246,7 @@ values('{uuid}','{revise_id}','metadata','winning-plat-02-FIELD_CODE','add',null
 **对应SQL**：
 ```sql
 insert into edsm_revise_detail(revise_detail_id,revise_id,business_code,business_id,revise_type_code,revise_before,revise_after,is_del,created_at)
-values('{uuid}','{revise_id}','datasetElement','winning-plat-02-DATASET_CODE-element_code','add',null,'{"elementId": "winning-plat-02-DATASET_CODE-element_code", "datasetId": "winning-plat-02-DATASET_CODE", "metadataId": "winning-plat-02-METADATA_CODE", "internalId": "", "elementCode": "element_code", "elementName": "元素中文名", "definition": "元素定义", "isPk": 0, "notnull": 0, "dataType": "S3", "representationFormat": "AN..100", "codeSystemId": "CVA-0308", "allow": "", "status": 1, "seqNo": 20, "isDel": 0, "createdAt": "2026-07-23T14:25:00", "modifiedAt": ""}',0,'2026-07-23T14:25:00');
+values('{uuid}','{revise_id}','datasetElement','winning-plat-02-DATASET_CODE-element_code','add',null,'{"elementId": "winning-plat-02-DATASET_CODE-element_code", "datasetId": "winning-plat-02-DATASET_CODE", "metadataId": "winning-plat-02-DATASET_CODE-element_code", "internalId": "", "elementCode": "element_code", "elementName": "元素中文名", "definition": "元素定义", "isPk": 0, "notnull": 0, "dataType": "S3", "representationFormat": "AN..100", "codeSystemId": "CVA-0308", "allow": "", "status": 1, "seqNo": 20, "isDel": 0, "createdAt": "2026-07-23T14:25:00", "modifiedAt": ""}',0,'2026-07-23T14:25:00');
 ```
 
 **字段说明**：
@@ -225,9 +255,9 @@ values('{uuid}','{revise_id}','datasetElement','winning-plat-02-DATASET_CODE-ele
 |--------|------|------|
 | elementId | String | `winning-plat-02-{数据集代码}-{元素代码}` |
 | datasetId | String | `winning-plat-02-{数据集代码}` |
-| metadataId | String | `winning-plat-02-{数据元代码}` |
+| metadataId | String | `winning-plat-02-{数据集代码}-{字段代码}`（= element_id，专属元数据，不与其它元素共用） |
 | internalId | String | 内部标识符，无则 `""` |
-| elementCode | String | 元素代码（数据库列名，小写） |
+| elementCode | String | 元素代码（与标准文档字段英文名大小写保持一致：文档大写则大写，文档小写则小写，不做任何转换） |
 | elementName | String | 元素中文名 |
 | definition | String | 元素定义说明 |
 | isPk | int | 0=否，1=是 |
@@ -243,6 +273,17 @@ values('{uuid}','{revise_id}','datasetElement','winning-plat-02-DATASET_CODE-ele
 | modifiedAt | String | 固定 `""` |
 
 **business_id** 与 `elementId` 保持一致。
+
+---
+
+### 4.4.1 元数据一对一规则（重要）
+
+**每个 datasetElement 必须对应唯一一个 metadata，二者一一对应，禁止共用。**
+
+- `metadata_id` 与 `metadata_code` 均等于该元素的唯一标识 `element_id`（`winning-plat-02-{数据集代码}-{字段代码}`）。
+- `datasetElement.metadata_id` 必须等于自己的 `element_id`，指向**专属**元数据，不能按字段名（element_code）去复用其它元素的元数据。
+- 同一字段名出现在不同数据集时，各自生成独立的 metadata（如 `...-BASE_DEPARTMENT-STATUS` 与 `...-BASE_EMPLOYEE-STATUS` 是两条不同的元数据）。
+- **历史已存在的元数据不做改动**，本规则仅对本次及以后的新增 / 修订生效。
 
 ---
 

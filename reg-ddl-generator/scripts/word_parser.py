@@ -278,6 +278,37 @@ def is_table_all_red(table):
                             return False
     return True
 
+def has_strikethrough(run):
+    """检查 run 是否带删除线（strikethrough）
+
+    v4.3.8 新增：用于识别"红色+删除线"的字段删除标记
+    - 文档中删除字段通常以整行红色 + 删除线标记，表示将该字段置为非必填（不真正删列）
+    """
+    # 方法1：直接从 XML 读取 w:strike（最可靠）
+    rPr = run._element.rPr
+    if rPr is not None:
+        strike_elem = rPr.find(qn('w:strike'))
+        if strike_elem is not None:
+            val = (strike_elem.get(qn('w:val')) or '').lower()
+            # 元素存在且未显式关闭（val 为空 / true / 1 / on）→ 有删除线
+            if val == '' or val in ('true', '1', 'on'):
+                return True
+            # val 为 false / 0 / off → 无删除线
+            return False
+    # 方法2：回退到 python-docx 标准属性
+    if run.font is not None and run.font.strike is True:
+        return True
+    return False
+
+def is_row_strikethrough(row):
+    """检查整行是否带删除线（任一非空单元格的 run 带删除线即视为删除行）"""
+    for cell in row.cells:
+        for para in cell.paragraphs:
+            for run in para.runs:
+                if run.text.strip() and has_strikethrough(run):
+                    return True
+    return False
+
 def get_cell_content(row, col_idx):
     """获取单元格内容，自动清理不可见字符"""
     if col_idx < len(row.cells):
@@ -809,6 +840,7 @@ def parse_word_document(doc_path):
     # 分析所有变更
     all_changes = []  # 新增字段的表
     modified_fields = []  # 修改字段的表
+    all_deletes = []  # 删除字段的表（整行红色 + 删除线，置为非必填）
     detected_headers = set()
 
     for table_idx, table in enumerate(tables):
@@ -828,25 +860,33 @@ def parse_word_document(doc_path):
         if table_idx in table_idx_to_name and table_idx_to_name[table_idx]['is_new']:
             continue
 
-        # 检查红色行（新增字段 - 整行红色）
+        # 检查红色行（新增字段 - 整行红色，无删除线）
         red_rows = []
+        # 检查删除行（整行红色 + 删除线 - 字段删除，置为非必填）
+        deleted_rows = []
         # 检查部分红色行（修改字段 - 部分内容红色）
         partial_red_rows = []
 
         for row_idx, row in enumerate(table.rows[1:], start=1):
             if is_row_all_red(row):
-                red_rows.append(row_idx)
+                # v4.3.8: 整行红色 + 删除线 = 字段删除；整行红色无删除线 = 新增字段
+                if is_row_strikethrough(row):
+                    deleted_rows.append(row_idx)
+                else:
+                    red_rows.append(row_idx)
             else:
                 # 检查是否有部分红色变更
                 partial_result = check_row_partial_red(row, col_indices)
                 if partial_result['changed_columns']:
                     partial_red_rows.append((row_idx, partial_result))
 
-        if not red_rows and not partial_red_rows:
+        if not red_rows and not partial_red_rows and not deleted_rows:
             continue
 
-        # 提取新增字段（整行红色）
+        # 提取新增字段（整行红色，无删除线）
         new_fields = []
+        # 提取删除字段（整行红色 + 删除线）v4.3.8
+        deleted_fields = []
         for row_idx in red_rows:
             row = table.rows[row_idx]
 
@@ -920,6 +960,70 @@ def parse_word_document(doc_path):
                     'required_cn': required_cn,
                     'comment': comment,
                     # v3.0.1: 新增原始值保存，用于DML生成
+                    'required_value': required,
+                    'format_value': format_col,
+                    'data_type_value': data_type_col,
+                    'data_type_category_value': data_type_col
+                })
+
+        # 提取删除字段（整行红色 + 删除线）v4.3.8
+        # 语义：不真正删列，而是将该字段置为非必填（NULL）
+        for row_idx in deleted_rows:
+            row = table.rows[row_idx]
+
+            field_cn = get_cell_content(row, col_indices.get('field_cn', col_indices.get('std_id', 0) + 1))
+            field_en = get_cell_content(row, col_indices.get('field_en', col_indices.get('std_id', 0)))
+            data_type_col = get_cell_content(row, col_indices.get('data_type', 3))  # 可能是S1/S2/S3或实际类型
+            format_col = get_cell_content(row, col_indices.get('format', 4))  # 表示格式列（优先使用）
+            length_col = get_cell_content(row, col_indices.get('length', 3))
+            required = get_cell_content(row, col_indices.get('required', 2))  # 约束列
+            comment = get_cell_content(row, col_indices.get('comment', 5))
+
+            # 清理字段名中的不可见字符和括号
+            field_en_clean = clean_invisible_chars(re.sub(r'[（）\(\)]', '', field_en).strip())
+
+            # 解析数据类型和长度（与新增字段一致）
+            data_type = ''
+            length = ''
+
+            if format_col:
+                parsed_type, parsed_length = parse_format_string(format_col, data_type_col)
+                if parsed_type:
+                    data_type = parsed_type
+                    length = parsed_length
+
+            if not data_type and data_type_col:
+                if data_type_col.upper() not in ['S1', 'S2', 'S3', 'S', 'S4', 'N', 'DT', 'D']:
+                    data_type = data_type_col.strip()
+                    if length_col:
+                        length = length_col.strip()
+
+            if not data_type and data_type_col:
+                cat = data_type_col.upper()
+                if cat in ['S1', 'S2', 'S3']:
+                    data_type = 'VARCHAR'
+                elif cat == 'DT':
+                    data_type = 'DATE'
+                elif cat == 'D':
+                    data_type = 'DATE'
+                elif cat == 'N':
+                    data_type = 'NUMBER'
+
+            if field_en_clean and data_type:
+                required_lower = required.lower() if required else ''
+                # 是否当前为必填（NOT NULL）→ 决定置非必填时是否真的需要 ALTER
+                is_required = bool('m' in required_lower or '必填' in required)
+                required_cn = '必填' if is_required else '应填'
+
+                deleted_fields.append({
+                    'field_cn': field_cn,
+                    'field_en': field_en_clean,
+                    'data_type': data_type,
+                    'length': length,
+                    'constraint': '',
+                    'required_cn': required_cn,
+                    'is_required': is_required,  # v4.3.8: 当前是否必填（用于Oracle运行时判断）
+                    'comment': comment,
                     'required_value': required,
                     'format_value': format_col,
                     'data_type_value': data_type_col,
@@ -1058,6 +1162,18 @@ def parse_word_document(doc_path):
                 'modified_fields': modified_fields_for_table
             })
 
+        # 收集删除字段（整行红色 + 删除线）v4.3.8
+        if deleted_fields and table_idx in table_idx_to_name:
+            table_info = table_idx_to_name[table_idx]
+            category_name = table_idx_to_category.get(table_idx, '')
+            all_deletes.append({
+                'table_idx': table_idx,
+                'table_cn': table_info['cn'],
+                'table_en': table_info['en'],
+                'category_name': category_name,
+                'deleted_fields': deleted_fields
+            })
+
     # 分析新增表的字段（用于生成CREATE TABLE）
     new_table_details = []
     for nt in new_tables:
@@ -1161,6 +1277,8 @@ def parse_word_document(doc_path):
         'all_changes': all_changes,
         'modified_tables': len(modified_fields),
         'modified_fields': modified_fields,
+        'deleted_tables': len(all_deletes),
+        'deleted_fields': all_deletes,
         'new_categories': new_categories,
         'doc_cover': doc_cover,
         'table_idx_to_category': table_idx_to_category
