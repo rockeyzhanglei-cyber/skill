@@ -74,43 +74,8 @@ metadata:
 
 ## 增量模式与全量模式（v4.1.0）
 
-本工具支持两种生成模式，DDL和DML可独立选择。
-
-### 增量模式（识别红色字体）
-- **核心规则**：识别红色字体标记的内容，只处理红色标记的变更
-- **DDL生成**：
-  - 整表红色 → CREATE TABLE（新增表）
-  - 整行红色 → ALTER TABLE ADD COLUMN（新增字段）
-  - 部分红色 → ALTER TABLE MODIFY（修改字段属性）
-- **DML生成**：仅同步红色标记的表和字段到标准库
-
-### 全量模式（不识别红色字体）
-- **核心规则**：不识别红色字体标记，将文档中所有涉及数据集的表格全部处理
-- **DDL生成**：所有表格生成CREATE TABLE脚本（完整建表）
-- **DML生成**：同步所有表格和字段到标准库
-
-**重要格式校验原则**（用户明确要求）：
-- **不自行容错**：如果表示格式不符合规范规则，不自行推断默认长度或类型
-- **列出问题字段**：解析完成后，扫描所有字段的表示格式，列出无法识别的给用户查看
-- **用户修正文档**：由用户在Word文档中修正表示格式后重新运行，不要自作主张给VARCHAR(n)等假设值
-- **AN..\* 不限长度**：映射为大字段类型（Oracle→CLOB, SQL Server→nvarchar(max), PostgreSQL→TEXT等）
-- **容错只覆盖字面量变形**：全角点(U+FF0E→U+002E)、不可见字符清理，这些是文档编辑时引入的非语义差异，而非格式语义差异
-- 增量模式 = 识别红色字体 → 只处理红色内容
-- 全量模式 = 不识别红色字体 → 处理所有表格
-- DDL语句和DML语句都遵循这个规则
-
-### 组合选择
-用户可以独立选择：
-| DDL模式 | DML模式 | 说明 |
-|--------|--------|------|
-| 增量 | 不生成 | 仅生成红色变更的DDL（原有默认行为） |
-| 增量 | 增量 | 生成红色变更的DDL + DML同步 |
-| 全量 | 不生成 | 所有表生成完整DDL |
-| 全量 | 全量 | 所有表生成完整DDL + DML同步 |
-| 全量 | 增量 | 所有表生成完整DDL，但DML只同步红色变更 |
-| 增量 | 全量 | 仅红色变更生成DDL，但DML同步所有表 |
-
----
+> **何时读**：确定生成模式时读 [references/incremental-full-mode.md](references/incremental-full-mode.md)。
+> **快速判断**：识别 Word 文档中的**红色字体**标记新增内容 → **增量模式**；不识别红色、处理所有表格 → **全量模式**。
 
 ## 预设文档目录（v4.0.0）
 
@@ -388,49 +353,8 @@ PDF标注`必填`的字段，Word中经常被错误标为`C`（有则必填）�
 
 ## 修改字段详细规则
 
-当表格中**部分内容**为红色字体时，按以下规则处理：
-
-### 需要生成DDL的变更（约束和表示格式列）
-
-| 列名 | 红色变更 | DDL操作 | 说明 |
-|-----|---------|---------|------|
-| 约束/填报要求 | M→O | ALTER TABLE MODIFY/ALTER COLUMN | 将 NOT NULL 改为 NULL（生成DDL） |
-| 约束/填报要求 | O→M | **不生成DDL** | 只更新修订记录注释，| 表示格式 | 类型/长度变更 | ALTER TABLE MODIFY/ALTER COLUMN | 修改数据类型或长度 |
-
-**约束列变更规则**：
-- `M`（必填）→ `O`（可选）：生成DDL，将 `NOT NULL` 改为 `NULL`
-- `O`（可选）→ `M`（必填）：**不生成DDL**，只在修订记录注释中体现
-
-**表示格式列变更**：
-- `AN..50` → `AN..100`：VARCHAR(50) → VARCHAR(100)
-- `N5` → `N10`：VARCHAR(5) → VARCHAR(10)
-- `DT15` → `DT19`：DATE 类型不变，无需修改
-
-### 只生成注释的变更（其他列）
-
-| 列名 | 红色变更 | 处理方式 |
-|-----|---------|---------|
-| 数据元名称/字段中文名 | 内容变更 | 仅修订记录注释，不生成DDL |
-| 说明/备注 | 内容变更 | 仅修订记录注释，不生成DDL |
-| 值域 | 内容变更 | 仅修订记录注释，不生成DDL |
-
-**修订记录格式**（仅修订记录注释、不生成 DDL 的字段属性变更，同样用统一语法）：
-```sql
-表名中文[表名]修改字段：字段名中文[字段名]（{旧属性值}→{新属性值}）
-```
-
-示例：
-```sql
-/*
-患者基本信息[JB_BRJBXX]修改字段：姓名[XM]（约束 → 必填）
-门诊就诊记录[JB_MZJZJL]修改字段：诊断代码[ZDDM]（表示格式 → AN..20）
-门诊就诊记录[JB_MZJZJL]修改字段：诊断名称[ZDMC]（说明 → ICD-10 诊断名称）
-*/
-```
-
-**注意**：只修改"说明"等非 DDL 列时，只在修订记录注释中体现（用上面的统一修改语法），不生成 ALTER 脚本。格式仍须与 `data-model-revision`《注释规范》一致。
-
----
+> **何时读**：处理**修改已有字段**（非新增字段）时读 [references/field-modification-rules.md](references/field-modification-rules.md)。
+> 含：需要生成 DDL 的变更（约束和表示格式列）、只生成注释的变更（其他列）。
 
 ## 修订记录格式
 
@@ -495,78 +419,8 @@ PDF标注`必填`的字段，Word中经常被错误标为`C`（有则必填）�
 
 ## DML标准库同步规则
 
-当用户选择生成DML脚本时，将变更同步到以下标准库表：
-
-### 表映射关系
-
-| Word文档元素 | 标准库表 | 操作规则 |
-|-------------|---------|---------|
-| 文档封面名称 | `edsm_data_standard` | 一般不新增/修改（固定7个标准） |
-| 数据集区域二级目录 | `edsm_dataset_category` | 红色字体→INSERT新增分类 |
-| 数据集表格 | `edsm_dataset` | 新增表→INSERT；修改表→DELETE+INSERT |
-| 数据集字段 | `edsm_dataset_element` | 新增字段→INSERT；修改字段→DELETE+INSERT |
-| 元数据汇总 | `edsm_metadata` | 与dataset_element**一一对应、各自独立**，每个元素生成一条专属metadata，绝不共用/去重 |
-
-### ID命名规则
-
-| 表 | ID格式 | 示例 |
-|----|--------|------|
-| edsm_data_standard | `{standard_prefix}` | `winning-plat-01` |
-| edsm_dataset_category | `{standard_id}-{category_name}` | `winning-plat-01-患者基本信息` |
-| edsm_dataset | `{standard_id}-{dataset_no}` | `winning-plat-01-PERSON` |
-| edsm_dataset_element | `{standard_id}-{dataset_no}-{element_code}` | `winning-plat-01-PERSON-XM` |
-
-### 分类目录提取规则
-
-Word文档中的"数据集区域"二级标题（如"患者基本信息"、"门急诊信息"）对应分类：
-- 检测标题是否红色字体
-- 红色标题 → 新增分类 → 生成INSERT语句
-- 非红色标题 → 不操作（分类已存在）
-
-### dataset_element字段映射
-
-| Word列头 | dataset_element字段 | 说明 |
-|---------|---------------------|------|
-| 数据元标识 | element_code | 字段英文名（大小写与标准文档一致，不转换：文档大写则大写、小写则小写） |
-| 数据元名称 | element_name | 字段中文名 |
-| 说明/定义 | definition | 字段定义说明 |
-| 约束(M/O) | notnull | 1=M(必填), 0=O(可选) |
-| 是否主键 | is_pk | 从definition中检测"复合主键"等字样 |
-| 数据类型 | data_type | S1/S2/S3/D/DT等 |
-| 表示格式 | representation_format | AN..64/N1/DT19等 |
-| 值域代码 | code_system_id | 如 GB/T 2261.1-2003 |
-
-### DML生成策略
-
-**新增场景**：
-```sql
--- 新增分类
-insert into edsm_dataset_category(...) select ... where not exists (...);
-
--- 新增数据集
-insert into edsm_dataset(...) select ... where not exists (...);
-
--- 新增字段
-insert into edsm_dataset_element(...) select ... where not exists (...);
-```
-
-**修改场景**（先删后插）：
-```sql
--- 修改数据集：删除旧数据
-delete from edsm_dataset_element where dataset_id = 'xxx';
-delete from edsm_dataset where dataset_id = 'xxx';
--- 再插入新数据
-insert into edsm_dataset(...) select ...;
-insert into edsm_dataset_element(...) select ...;
-```
-
-**元数据一对一（重要，废除共用/去重）**：
-- edsm_metadata 与 edsm_dataset_element **一一对应**：每一条 dataset_element 都生成一条独立、专属的 metadata，绝不按字段名共用同一份元数据（否则同名不同表的字段会串号）
-- `metadata_id` = `metadata_code` = `element_id`（即 `{standard_id}-{dataset_no}-{element_code}`）
-- `dataset_element.metadata_id` 直接关联自己的 `element_id`，不再通过 `element_code` 字段名反查
-- 脚本通过 `not exists (select 1 from edsm_metadata where metadata_id = a.element_id)` 保证幂等增量；历史已存在的元数据**不做任何改动**
-
----
+> **何时读**：需要生成 **DML 标准库同步脚本**时读 [references/dml-standard-lib-sync.md](references/dml-standard-lib-sync.md)。
+> 含：表映射关系、ID命名规则、分类目录提取规则、dataset_element 字段映射、DML生成策略。
 
 ## 约束显示与脚本处理规则（v4.3.4）
 
@@ -657,144 +511,8 @@ Word文档"填报要求"列可能包含多种约束类型，处理规则如下�
 
 ## 表名格式识别规则（v4.3.3/v4.3.5）
 
-### 段落样式过滤（v4.3.5 重要）
-
-**只提取Heading样式段落的表名，排除Normal样式的说明文字！**
-
-Word文档中表格前可能有两种段落：
-- **Heading样式（标题）**：真正的表名定义，如"出院患者收费记录表 ZYSFJLB"
-- **Normal样式（正文）**：表说明文字，如"1、必须和住院收费记录表(ZYSFJLB)关联..."
-
-| 样式 | 示例 | 处理 |
-|------|------|------|
-| Heading 3 | "出院患者收费记录表 ZYSFJLB" | ✓ 提取表名 |
-| Normal | "1、必须和住院收费记录表(ZYSFJLB)关联..." | ✗ 排除 |
-
-**判断方法**：检查 `para.style.name`，只处理以"Heading"开头或包含"标题"的段落。
-
-### 表名格式匹配
-
-解析器支持两种表名格式：
-
-| 格式 | 示例 | 说明 |
-|------|------|------|
-| 空格分隔 | `孕册信息 FB_YCF_YCXX` | 表名在段落末尾，空格分隔 |
-| 中文括号 | `献血者基本信息（XZ_XXZJBXX）` | 表名在中文括号内 |
-
-**代码实现**：word_parser.py的extract_table_names_ordered函数先检查段落样式是否为Heading，再匹配表名格式。
-
-### 步骤2：解析文档表格
-
-处理：
-1. 使用 python-docx 读取文档
-2. 提取所有表格
-3. 自动过滤非数据库表结构表格（汇总表、指标表等）
-4. 解析标题行获取表名（格式：`中文名 表名`）
-5. 提取列头
-6. 检测红色字体标记
-
-输出：
-```
-文档共有 X 个表格（数据库表结构表格 Y 个）
-检测到列头：[数据元标识, 数据元名称, 约束, 数据类型, 表示格式, 说明]
-有红色标记的表格：X 个
-新增表：X 个
-新增字段：X 个
-修改字段：X 个
-```
-
-### 步骤2.5：格式校验（v4.4.0 新增——必须执行）
-
-解析后、生成前，**先执行格式校验**：
-
-1. 遍历所有字段，对每个表示格式调用 `parse_format_string`
-2. 返回 `('', '')` 的 → 列出完整信息（表名、字段名、数据类型、表示格式），**不自行容错**
-3. 有不符合规范的字段 → **给用户列出来**，用户修改文档后再重新生成
-4. 全部规范 → 进入下一步
-
-**容错规则**（仅修正纯字面量变形，不影响语义）：
-- 全角点 U+FF0E → U+002E（N．．4 → N..4）
-- 不可见字符（零宽空格、软连字符等）清理
-
-**不做容错**（格式语义未知，必须用户确认）：
-- 裸数字 `4000`、`64`、`18`
-- 非标准前缀 `M1`
-- `AN..` 缺少最大长度数字
-- `AN..AN..50` 重复前缀
-- 中文逗号替换英文逗号
-
-### 步骤3：逐个询问选项（单问单答）
-
-每个选项用单独的 clarify 工具依次询问，每次**最多 4 个选项**：
-
-1. **数据库类型**（可传数组，输入序号如 `1,3` 表示多选）：
-   ```
-   1. Oracle
-   2. MySQL
-   3. SQL Server
-   4. PostgreSQL
-   ```
-2. **DDL模式**：
-   ```
-   1. 全量（所有表CREATE TABLE）
-   2. 增量（仅红色标记变更）
-   ```
-3. **DML模式**：
-   ```
-   1. 不生成DML
-   2. 全量DML
-   3. 增量DML
-   ```
-4. **大小写格式**：
-   ```
-   1. 全小写
-   2. 全大写
-   ```
-5. **关联表**（TRAN/LOG表同步）：
-   ```
-   1. 是
-   2. 否
-   ```
-6. **公共字段**（SCZT等）：
-   ```
-   1. 是
-   2. 否
-   ```
-
-**不要**使用预置组合方式（已被用户否决——选项过多组合爆炸，用户偏好一个个问）。
-
-**关键规则**：
-- **数据库类型可多选**，每选一种生成一套脚本。用户在 choices 中输入序号组合如 `1,3`
-- 其他选项若用户输入多个，取第一个
-- 用户重新调用skill时，必须从头开始流程
-
-**多数据库处理**：每种类型分别调用 `run_generator.py`，最终告知所有文件路径。
-
-### 步骤4：生成修订记录
-
-遍历有变更的表格，按格式生成修订记录注释。
-
-### 步骤5：生成DDL/DML脚本
-
-- 根据用户选择的数据库类型生成对应DDL
-- 应用大小写格式到所有字符
-- 若用户选择生成DML，同时生成标准库同步脚本
-- 输出文件：DDL文件（必选）和DML文件（可选）
-
-### 步骤6：语法验证 + 自进化（v4.4.0 新增）
-
-脚本生成后，**必须执行语法验证**，确保没有以下问题：
-- VARCHAR/VARCHAR2/NVARCHAR 无长度（如 `varchar2` 不带括号）
-- NUMBER/NUMERIC 无精度（如 `number` 不带括号）
-- 括号不配对、重复关键字等
-
-验证使用 `scripts/verify_sql.py`（已集成到 `run_generator.py` 中自动执行）。
-
-**发现问题时的处理流程（自进化环路）**：\n```\n生成脚本 → 验证语法 → 有错误?\n  ├── 是 → 定位根因（parse_format_string/ddl_generator/type_map）\n  │        → 修复代码/bug\n  │        → 重新生成 → 重新验证（循环，直到无错误）\n  └── 否 → 交付用户\n```\n\n### 常见语法验证失败原因\n\n| 现象 | 根因 | 修复方式 |\n|------|------|---------|\n| `varchar` 无长度（如 `varchar not null`） | Word文档中该字段表示格式列为空，map_type未生成长度 | 设置默认长度：`varchar(255)`；或补全Word文档表示格式列 |\n| `numeric` 无精度（如 `numeric not null`） | Word文档中数值字段表示格式列为空 | 设置默认精度：`numeric(18,2)`；或补全Word文档 |\n| `varchar2` 无括号 | Oracle映射时长度缺失 | 检查 parse_format_string 是否识别了该格式 |
-| `varchar` 无长度（如 `varchar not null`） | Word文档中该字段表示格式列为空，map_type未生成长度 | 设置默认长度：`varchar(255)`；或补全Word文档表示格式列 |
-| `numeric` 无精度（如 `numeric not null`） | Word文档中数值字段表示格式列为空 | 设置默认精度：`numeric(18,2)`；或补全Word文档 |\n\n**修复后务必同步到公共目录**（`~/.agents/skills/reg-ddl-generator/`），让其他智能体也能用到修复后的代码。在 Hermes 内使用 `terminal` 执行 cp 命令同步。
-
----
+> **⚠️ 解析标准文档表格前必读**：[references/table-name-detection.md](references/table-name-detection.md)
+> 含：段落样式过滤（v4.3.5 重要）、表名格式匹配、步骤2解析文档表格、**步骤2.5格式校验（必须执行）**、步骤3逐个询问选项（单问单答）、步骤4生成修订记录、步骤5生成DDL/DML脚本、步骤6语法验证+自进化。
 
 ## 固化脚本调用
 
@@ -933,6 +651,20 @@ distributed by hash(sys_soid) buckets 8;
 
 ---
 
-## DDL模板参考
+## 参考文档索引（references/）
 
-详细DDL模板请参考：`references/ddl-templates.md`
+> **原则**：SKILL.md 只保留核心规则与触发入口，下表文件**按需读取**，不必一次全读。
+
+| 文件 | 触发时机 |
+|------|---------|
+| `table-name-detection.md` | **解析标准文档表格前必读**（段落样式过滤、表名格式匹配、步骤2~步骤6） |
+| `script-examples.md` | 生成 DDL 注释前读**第一部分**；生成 SQL Server / Oracle 脚本前读**第二部分** |
+| `dml-standard-lib-sync.md` | 需要生成 **DML 标准库同步脚本**时读 |
+| `field-modification-rules.md` | 处理**修改已有字段**（非新增字段）时读 |
+| `incremental-full-mode.md` | 确定**增量 / 全量**模式时读 |
+| `ddl-templates.md` | 生成具体 DDL 前对照模板（原「DDL模板参考」入口） |
+| `mineru-extraction.md` | 用 **MinerU** 提取 PDF 时读 |
+| `font-and-inherit-tables.md` | 处理**字体格式 / 继承表字段**时读 |
+| `rule-a-standard.md` | 按**规则A（区域卫生信息平台数据传输规范）**生成时读 |
+| `rule-b-interface.md` | 按**规则B（数据采集接口标准）**生成时读 |
+| `revise-record-generator-bugs.md` | 修订记录生成脚本**异常时排查** |
