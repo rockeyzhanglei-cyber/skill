@@ -4059,6 +4059,15 @@ class StandardComparator:
                 target_prefix = ''
             if source_prefix in _tail_kinds:
                 source_prefix = ''
+            # 【非对称判定】目标有实质前缀、源无前缀 → 不兼容。
+            # 语义：目标要求特定（如"联系人电话"），源是通用字段（如"电话号
+            # 码"），源的值域不保证满足目标的限定，故拒绝。与"约束保护"同理
+            # ——目标要求更严时源必须满足。
+            # 反向（目标通用、源特定）不拦：源值仍属目标范畴（如"电话"
+            # 可用"联系电话"填），保持原有放行。
+            if target_prefix and not source_prefix:
+                return False
+
             # 前缀不同但允许一方无前缀或子串匹配：
             # "电话"匹配"联系电话"、"联系人电话"匹配"联系电话"
             if target_prefix != source_prefix and target_prefix and source_prefix:
