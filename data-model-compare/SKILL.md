@@ -391,6 +391,25 @@ relations:
 - **添加新匹配策略**：在 `matchers/` 下添加匹配器，注册到 `standard_comparator.py`
 - **添加新报告格式**：在 `reporters/` 下创建报告生成器，实现 `generate()` 方法
 
+## 代码结构（matchers/）
+
+P1-2 把 5019 行的单文件类拆成"主控 + 若干无状态辅助模块"：
+
+| 模块 | 职责 | 状态依赖 |
+|------|------|---------|
+| `standard_comparator.py` | 主控：匹配调度、通道编排、结果组装 | **有**（配置与运行时状态） |
+| `matching_core.py` | 核心概念判定、显式同义判定、词表（唯一事实来源） | 无 |
+| `field_compatibility.py` | 字段兼容性判定（语义 / 种类 / 角色 / 类型） | 无 |
+| `auto_relation.py` | P6 自动关联（沿 FK 关联图搜子表）判定 + 通道级常量 | 无 |
+| `text_utils.py` | 文本工具（LCS、子序列、角色尾词剥离） | 无 |
+| `global_lookup.py` | 全局查找的基名 / 语义基名归一化 | 无 |
+| `value_domain_comparator.py` | 值域比对 | — |
+| `self_validator.py` | 自验证（漏配 / 疑误配体检） | — |
+
+**约定**：标"无"的模块必须保持无状态——需要配置时**通过参数传入**，
+不要反向 import `standard_comparator`（会形成循环依赖，且判定结果难以复现）。
+主控里保留的是**同名薄委托**，调用这些无状态方法时写法不变。
+
 ## 测试与回归防止
 
 ### 快速迭代与审计工具链（优化 skill 时用这套）
