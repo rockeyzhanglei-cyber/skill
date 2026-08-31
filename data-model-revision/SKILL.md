@@ -393,7 +393,10 @@ HDS{standard_seq:02d}{category_seq:02d}.{dataset_seq:03d}.{element_seq:03d}
 
 > **唯一来源**：Doris DDL 统一委托 **`reg-ddl-generator` Skill**（v4.6.0，`SKILL.md`《Doris 脚本生成规范》 + `references/ddl-templates.md`《Doris 模板》）生成，**本 Skill 不另立写法**。以下仅摘要核心要点，细节以 reg-ddl-generator 为准。
 
-**生成路径**：先按 PostgreSQL 方言生成 probe（`--db postgresql --case lower --no-tran-log --no-public-fields`），再用 `scripts/convert_doris.py` 自动转换。
+**生成路径**：先按 PostgreSQL 方言生成 probe（`--db postgresql --case lower --no-tran-log --no-public-fields`），再用 `reg-ddl-generator/scripts/convert_doris.py` 自动转换。
+
+> ⚠️ **脚本归属**：`convert_doris.py` / `verify_sql.py` 属于 **`reg-ddl-generator`**（本 Skill 的 `scripts/` 下没有这两个文件）。
+> 本节提到的这两个脚本路径，均指 `reg-ddl-generator/scripts/` 下。
 
 ### 字符串长度 ×4 规则（用户 2026-08-28 确定）
 
@@ -401,14 +404,14 @@ Doris 存储 UTF-8 中文，**1 个汉字 3 字节、1 个特殊字符 4 字节*
 
 - 由 `convert_doris.py` **转换时自动执行**，probe 阶段保持文档原始长度，**禁止提前手动 ×4**（否则变 ×16）。
 - 最大原始 4000 → 16000，未超 Doris 上限 65533（溢出场景另议）。
-- 自检：输出中所有 varchar/char 长度必须能被 4 整除（`verify_sql.py --db doris` 强制检查）。
+- 自检：输出中所有 varchar/char 长度必须能被 4 整除（`reg-ddl-generator/scripts/verify_sql.py --db doris` 强制检查）。
 
 ### 语法差异（GP → Doris，由转换器处理）
 
 > **何时读**：Doris 转换结果报错、或需人工核对转换是否正确时读 [references/doris_ddl.md](references/doris_ddl.md)。
-> 含 Greenplum → Doris 语法差异对照表、同表合并规则、转换后 SQL 示例。转换由 `scripts/convert_doris.py` 自动完成。
+> 含 Greenplum → Doris 语法差异对照表、同表合并规则、转换后 SQL 示例。转换由 `reg-ddl-generator/scripts/convert_doris.py` 自动完成。
 
-**校验**：`verify_sql.py <输出.sql> --db doris`（查 numeric/timestamp 残留 + 字符串长度非 4 倍数）。
+**校验**：`reg-ddl-generator/scripts/verify_sql.py <输出.sql> --db doris`（查 numeric/timestamp 残留 + 字符串长度非 4 倍数）。
 
 ---
 
