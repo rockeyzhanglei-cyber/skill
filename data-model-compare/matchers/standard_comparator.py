@@ -18,6 +18,8 @@ from parsers.standard_parser import StandardDocument, StandardTable, StandardFie
 from matchers.matching_core import core_compatible, in_explicit_synonym_dict, strip_generic
 from matchers import field_compatibility
 from matchers import auto_relation
+from matchers import text_utils
+from matchers import global_lookup
 from matchers.matching_core import COMPARATOR_PREFIXES as _CORE_GENERIC_PREFIXES
 from matchers.matching_core import GENERIC_SUFFIXES as _CORE_GENERIC_SUFFIXES
 
@@ -679,37 +681,24 @@ class StandardComparator:
     _NUM_SUFFIX_PAREN_RE = re.compile(r'^(.*?)[（(]\s*[一二三四五六七八九十]+\s*孩\s*[）)]\s*$')
     _EN_NUM_SUFFIX_RE = re.compile(r'^(.*?)[_ ]?(?:[a-z]*\d+|[一二三四五六七八九十]+)$')
 
-    # 字段角色尾词（从基础名中剥离，用于提取「域概念」）。按长度降序排列。
-    _ROLE_TAILS = [
-        'Ⅰ助', 'Ⅱ助', '一助', '二助', '三助',
-        '唯一标识', '流水号', '序号', '编号', '标识', '标志',
-        '持续时间', '日期时间', '日期', '时间',
-        '麻醉方式', '麻醉医师', '麻醉分级',
-        '切口愈合等级', '切口类别', '愈合等级',
-        '助', '级别', '等级', '类别', '类型',
-        '医师', '名称', '姓名', '编码', '代码', '号',
-    ]
+    # （P1-2 第三刀）下列常量已下沉至 text_utils / global_lookup，
+    # 此处以类属性别名保持 cls._XXX / self._XXX 的既有用法不变。
+    _ROLE_TAILS = text_utils.ROLE_TAILS
+    _GEN_PREFIXES = text_utils.GEN_PREFIXES
+    _ROLE_KEYWORDS = text_utils.ROLE_KEYWORDS
+    _PROC_ROMAN = text_utils.PROC_ROMAN
+    _PROC_FLAG_KEYS = text_utils.PROC_FLAG_KEYS
+    _GLOBAL_NORM_PAIRS = global_lookup.GLOBAL_NORM_PAIRS
+    _GLOBAL_TAIL_KINDS = global_lookup.GLOBAL_TAIL_KINDS
+    _GLOBAL_NOISE_CHARS = global_lookup.GLOBAL_NOISE_CHARS
+    _GLOBAL_LEAD_PREFIXES = global_lookup.GLOBAL_LEAD_PREFIXES
+    _ADDR_COMPONENT_PAIRS = global_lookup.ADDR_COMPONENT_PAIRS
+    _ADDR_LOC_PAIRS = global_lookup.ADDR_LOC_PAIRS
+    _EN_NORM_PAIRS = global_lookup.EN_NORM_PAIRS
+    _P5_NORM_PAIRS = global_lookup.P5_NORM_PAIRS
 
-    # 通用布尔前缀（从基础名开头剥离，避免「是否…」与子表「是否主要诊断」等
-    # 弱子串误匹配，导致操作类字段误映射到诊断子表）。
-    _GEN_PREFIXES = ['是否', '有无', '需']
 
-    # 字段角色 → 关键词（按关键词长度降序，用于从字段名后缀判定角色）。
-    # 角色用于把「目标序号字段」映射到子表里「同角色」的字段
-    # （如 诊断代码 → 子表 诊断代码 字段；诊断名称 → 诊断名称 字段）。
-    _ROLE_KEYWORDS = [
-        ('code', ['代码', '编码']),
-        ('name', ['名称', '姓名']),
-        ('datetime', ['日期时间']),
-        ('date', ['日期']),
-        ('time', ['时间']),
-        ('doctor', ['Ⅰ助', 'Ⅱ助', '一助', '二助', '三助', '麻醉医师', '医师', '助']),
-        ('anaesthesia', ['麻醉方式', '麻醉分级']),
-        ('incision', ['切口愈合等级', '切口类别', '愈合等级']),
-        ('type', ['类型', '类别', '级别', '等级']),
-        ('duration', ['持续时间']),
-        ('id', ['唯一标识', '流水号', '序号', '编号', '标识', '标志', '号']),
-    ]
+
 
     def _strip_number_suffix(self, cn: str, en: str):
         """返回 (base_cn, base_en)：剥离尾随序号后的基础名；无序号返回 (None, None)。"""
@@ -730,31 +719,10 @@ class StandardComparator:
         return base_cn, base_en
 
     @staticmethod
-    def _strip_role_tail(text: str) -> str:
-        """剥离字段角色尾词与括号内说明，提取域概念。
+    def _strip_role_tail(text):
+        """实现已移至 matchers/text_utils.strip_role_tail（P1-2 第三刀拆分）。"""
+        return text_utils.strip_role_tail(text)
 
-        例：'出院西医其他诊断疾病代码'→'出院西医其他诊断疾病'
-            '其他手术操作Ⅰ助'→'其他手术操作'
-            '入院病情(对应其他诊断1)'→'入院病情'
-        """
-        if not text:
-            return ''
-        t = re.sub(r'[（(][^）)]*[）)]', '', text)  # 去括号内说明
-        t = t.strip()
-        # 剥离开头通用布尔前缀（是否 / 有无 / 需）
-        for pfx in StandardComparator._GEN_PREFIXES:
-            if t.startswith(pfx):
-                t = t[len(pfx):].strip()
-                break
-        changed = True
-        while changed:
-            changed = False
-            for tail in StandardComparator._ROLE_TAILS:
-                if t.endswith(tail) and len(t) > len(tail):
-                    t = t[: -len(tail)].strip()
-                    changed = True
-                    break
-        return t
 
     def _cluster_numbered_fields(self, target_table, min_group: int) -> Dict[str, list]:
         """检测目标表序号字段并按基础名聚类。返回 {base_key: [field,...]}（仅 >= min_group）。"""
@@ -810,20 +778,10 @@ class StandardComparator:
         return cands
 
     @staticmethod
-    def _has_common_substr(a: str, b: str, min_len: int = 2) -> bool:
-        """a、b 是否存在长度 >= min_len 的公共子串。"""
-        if not a or not b:
-            return False
-        dp = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
-        best = 0
-        for i in range(1, len(a) + 1):
-            ai = a[i - 1]
-            for j in range(1, len(b) + 1):
-                if ai == b[j - 1]:
-                    dp[i][j] = dp[i - 1][j - 1] + 1
-                    if dp[i][j] > best:
-                        best = dp[i][j]
-        return best >= min_len
+    def _has_common_substr(a, b, min_len):
+        """实现已移至 matchers/text_utils.has_common_substr（P1-2 第三刀拆分）。"""
+        return text_utils.has_common_substr(a, b, min_len)
+
 
     def _domain_subtable_score(self, domain: str, sub_table) -> int:
         """域概念与子表的重叠得分：子表中含域概念（>=2 字公共子串）的字段数。
@@ -848,152 +806,60 @@ class StandardComparator:
         return score
 
     @staticmethod
-    def _field_role(cn: str) -> str:
-        """从字段中文名后缀判定角色（code/name/date/doctor/...）。"""
-        if not cn:
-            return ''
-        for role, kws in StandardComparator._ROLE_KEYWORDS:
-            for kw in kws:
-                if cn.endswith(kw) and len(cn) > len(kw):
-                    return role
-        return ''
+    def _field_role(cn):
+        """实现已移至 matchers/text_utils.field_role（P1-2 第三刀拆分）。"""
+        return text_utils.field_role(cn)
+
 
     @staticmethod
-    def _role_keyword(cn: str) -> str:
-        """返回字段中文名末尾命中的具体角色关键词（如 Ⅰ助/麻醉方式/切口类别/代码）。"""
-        if not cn:
-            return ''
-        for role, kws in StandardComparator._ROLE_KEYWORDS:
-            for kw in kws:
-                if cn.endswith(kw) and len(cn) > len(kw):
-                    return kw
-        return ''
+    def _role_keyword(cn):
+        """实现已移至 matchers/text_utils.role_keyword（P1-2 第三刀拆分）。"""
+        return text_utils.role_keyword(cn)
 
-    # ---- round7：手术族多序号字段匹配修复 ----
-    # 病案首页手术族（其他手术操作Ⅰ助/Ⅱ助/麻醉方式/切口类别/麻醉分级/手术类型…、
-    # 是否为日间手术/日间操作）大面积错配的根因：
-    #   旧 `_map_numbered_field_to_subfield` 只用「角色硬过滤 + 剥离后的域概念
-    #   公共子串(>=2)」打分。角色硬过滤把 Ⅰ助→doctor 的正确候选
-    #   （手术一助姓名 role=name / 手术一助标识 role=id）全部跳过，反而放行
-    #   role='' 的「是否是主要手术」；域概念又只剥到「其他手术操作」，与所有
-    #   手术子表字段共享「手术」子串(=2)，无法区分具体字段 → 整族错配到
-    #   主字段/唯一标识（MAIN_OP_FLAG x234、OPERATION_ID x39）。
-    # 新方案（通用，不硬编码表名）：
-    #   1) 全名规范化（Ⅰ/Ⅱ/Ⅲ→一/二/三、操作→手术、类型→类别、医生/术者→医师）
-    #      后按「最长公共子串」打分，不再剥光角色尾词——「其他手术操作一助」vs
-    #      「手术一助姓名」直接命中「手术一助」=4，天然区分「是否是主要手术」=2；
-    #   2) 目标末尾角色关键词（_role_keyword：Ⅰ助/麻醉方式/切口类别/代码…）在
-    #      源字段名中出现 → +30（切口类别→手术切口类别代码，而不是切口愈合等级）；
-    #   3) 源字段全名是目标基础名的「子序列」→ +30，且平局时短名（通用字段）优先
-    #      （其他手术操作代码→手术代码[OP_NO]，而非手术切口类别代码）；
-    #   4) 手术角色族术语对齐（麻醉/一助/二助/术者·医师）→ +40，把
-    #      「其他手术医师」正确导向「术者姓名」而非「麻醉医师标识」；
-    #   5) 目标英文后缀（_code/_name/_id）与源英文名（CODE/NAME/ID）对齐 → +15
-    #      （一助三字段、麻醉方式 code/name 间消歧）；
-    #   6) 角色一致 → +30；目标非标志类、源为唯一标识/序号/标志 → -30；
-    #   7) 总分 < _PROC_MIN_SCORE(=4) 视为无对应源字段 → sub_field=''，
-    #      归属子表新增（如 是否为日间手术/日间操作：源标准只有病案级
-    #      是否日间手术病例[AMBL_OP_FLAG]，无逐记录日间标志）。
-    _PROC_ROMAN = {'Ⅰ': '一', 'Ⅱ': '二', 'Ⅲ': '三', 'Ⅳ': '四', 'Ⅴ': '五'}
+
     _PROC_MIN_SCORE = 4
-    _PROC_FLAG_KEYS = ('唯一标识', '流水号', '序号', '标志')
 
     @staticmethod
-    def _norm_proc_name(cn: str) -> str:
-        """序号字段匹配用名称规范化：
-        罗马数字→中文数字（Ⅰ助→一助）；手术/操作同族（操作→手术）；
-        类型/类别同义（类型→类别）；医生/术者归入医师（麻醉医生→麻醉医师）。
-        全部为卫生信息标准的通用同族约定，不涉及具体表名。"""
-        if not cn:
-            return ''
-        s = ''.join(StandardComparator._PROC_ROMAN.get(ch, ch) for ch in cn)
-        s = s.replace('操作', '手术')
-        s = s.replace('类型', '类别')
-        s = s.replace('医生', '医师')
-        s = s.replace('术者', '医师')
-        return s
+    def _norm_proc_name(cn):
+        """实现已移至 matchers/text_utils.norm_proc_name（P1-2 第三刀拆分）。"""
+        return text_utils.norm_proc_name(cn)
+
 
     @staticmethod
-    def _proc_family(cn: str) -> str:
-        """手术角色族术语（作用于规范化后的名称）：
-        麻醉 / 一助 / 二助 / 术者·医师（默认手术执行者），用于族内对齐。"""
-        if not cn:
-            return ''
-        if '麻醉' in cn:
-            return 'anes'
-        if '一助' in cn:
-            return 'assist1'
-        if '二助' in cn:
-            return 'assist2'
-        if '术者' in cn or '医师' in cn or '医生' in cn:
-            return 'doctor'
-        return ''
+    def _proc_family(cn):
+        """实现已移至 matchers/text_utils.proc_family（P1-2 第三刀拆分）。"""
+        return text_utils.proc_family(cn)
+
 
     @staticmethod
-    def _is_flagish(cn: str) -> bool:
-        """是否/有无/需 前缀或 唯一标识/流水号/序号/标志 类（标志性字段）。"""
-        if not cn:
-            return False
-        if cn.startswith(('是否', '有无', '需')):
-            return True
-        return any(k in cn for k in StandardComparator._PROC_FLAG_KEYS)
+    def _is_flagish(cn):
+        """实现已移至 matchers/text_utils.is_flagish（P1-2 第三刀拆分）。"""
+        return text_utils.is_flagish(cn)
+
 
     @staticmethod
-    def _lcs_substr_len(a: str, b: str) -> int:
-        """最长公共子串长度。"""
-        if not a or not b:
-            return 0
-        dp = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
-        best = 0
-        for i in range(1, len(a) + 1):
-            ai = a[i - 1]
-            for j in range(1, len(b) + 1):
-                if ai == b[j - 1]:
-                    dp[i][j] = dp[i - 1][j - 1] + 1
-                    if dp[i][j] > best:
-                        best = dp[i][j]
-        return best
+    def _lcs_substr_len(a, b):
+        """实现已移至 matchers/text_utils.lcs_substr_len（P1-2 第三刀拆分）。"""
+        return text_utils.lcs_substr_len(a, b)
+
 
     @staticmethod
-    def _lcs_len(a: str, b: str) -> int:
-        """最长公共子序列长度（空间优化版，仅作平局再分）。"""
-        if not a or not b:
-            return 0
-        m, n = len(a), len(b)
-        dp = [0] * (n + 1)
-        for i in range(1, m + 1):
-            prev = 0
-            ai = a[i - 1]
-            for j in range(1, n + 1):
-                temp = dp[j]
-                if ai == b[j - 1]:
-                    dp[j] = prev + 1
-                else:
-                    if dp[j - 1] > dp[j]:
-                        dp[j] = dp[j - 1]
-                prev = temp
-        return dp[n]
+    def _lcs_len(a, b):
+        """实现已移至 matchers/text_utils.lcs_len（P1-2 第三刀拆分）。"""
+        return text_utils.lcs_len(a, b)
+
 
     @staticmethod
-    def _is_subseq(short: str, long: str) -> bool:
-        """short 是否是 long 的子序列（保持顺序即可，不必连续）。
-        例：手术代码 ⊂ 其他手术操作代码 ✓；手术切口类别代码 ⊄ 其他手术操作代码。"""
-        if not short:
-            return True
-        if not long:
-            return False
-        it = iter(long)
-        return all(ch in it for ch in short)
+    def _is_subseq(short, long):
+        """实现已移至 matchers/text_utils.is_subseq（P1-2 第三刀拆分）。"""
+        return text_utils.is_subseq(short, long)
+
 
     @staticmethod
-    def _en_suffix_signal(target_en: str, sf_en: str) -> int:
-        """目标英文字段名后缀（_code/_name/_id）与源英文字段名（CODE/NAME/ID）对齐 → +15。"""
-        t = (target_en or '').lower()
-        s = (sf_en or '').upper()
-        for tok in ('_code', '_name', '_id'):
-            if tok in t and tok[1:].upper() in s:
-                return 15
-        return 0
+    def _en_suffix_signal(target_en, sf_en):
+        """实现已移至 matchers/text_utils.en_suffix_signal（P1-2 第三刀拆分）。"""
+        return text_utils.en_suffix_signal(target_en, sf_en)
+
 
     def _map_numbered_field_to_subfield(self, target_field: StandardField, sub_table):
         """把目标序号字段映射到子表里「名称最重叠 + 手术角色族对齐」的具体字段。
@@ -2607,167 +2473,38 @@ class StandardComparator:
             return sf
         return None
 
-    # ===== 跨表同义级兜底（P4）=====
-    # 只做"同义变体"归一，不剥离括号说明——括号里的内容（如"对应其他诊断13"）
-    # 恰恰是区分主子表展开字段的关键，剥离会造成大面积误配。
-    _GLOBAL_NORM_PAIRS = [
-        ('（', '('), ('）', ')'),          # 全角括号归一
-        ('医师', '医生'), ('大夫', '医生'),
-        ('编码', '代码'), ('代号', '代码'),
-        ('唯一标识', '标识'),
-        ('名字', '名称'), ('姓名', '名称'),
-    ]
-    # 结尾的"种类词"——比较时剥离，改由 _field_kind_compatible 单独把关，
-    # 这样 "麻醉分级代码" 才能匹配到源标准里没有后缀的 "麻醉分级"。
-    _GLOBAL_TAIL_KINDS = ['唯一标识', '流水号', '名称', '代码', '编码', '代号',
-                          '标识', '标志', '序号', '编号', '签名']
-    # 纯噪音字符：分隔符、标点、结构助词。两个标准对同一数据元的写法差异
-    # 大量集中在这里，不去掉会造成大面积漏配：
-    #   收退费日期时间      == 收/退费日期时间
-    #   损伤、中毒的外部原因 == 损伤中毒外部原因
-    _GLOBAL_NOISE_CHARS = '、，,；;／/·　 的'
 
-    # 全局语义兜底用的"前缀"——比较时剥离，使组件字段匹配其基名：
-    #   患者电子邮件地址 -> 电子邮件地址（匹配源"电子邮件地址"）
-    #   住院主要诊断 -> 主要诊断（匹配源"主要诊断"）
-    # 仅在 _global_semantic_lookup 中使用，不影响精确/同义主链路。
-    # 注意：
-    #  - 就诊/急诊 不在剥离列表：剥离后只剩"流水号/费用总金额"等通用词，
-    #    会把 就诊流水号 错配到 住院流水号（角色闸门不覆盖 就诊vs住院）。
-    #  - 出生地/户籍地/居住地/常住地/工作地 等"地址位置前缀"受保护（见
-    #    _ADDR_PROTECTED_PREFIXES），不剥离——它们是地址组件族（省市/地市/
-    #    区县/街道/村路弄/门牌/邮编）的**消歧关键**：出生地-省市代码 只能
-    #    匹配 出生地（省市），不能匹配 户籍地址（省市）。
-    _GLOBAL_LEAD_PREFIXES = ['患者', '本人', '住院', '门诊', '入院', '出院',
-                             '产前', '产后', '主诉', '既往', '关键']
     # 地址位置前缀（不剥离，保留作消歧）：来源 V6.0 用"现住址/户籍地址/
     # 单位地址/联系人地址"，目标省平台用"居住地/户籍地/常住地/工作单位及
     # 地址"，通过 _ADDR_LOC_PAIRS 归一为同一前缀。
     _ADDR_PROTECTED_PREFIXES = ['出生地', '户籍地', '居住地', '现住地', '常住地',
                                 '工作地', '单位', '家庭', '联系人']
-    # 地址组件同义词（先括号归一、再整词替换）。两个标准对同一地址组件的
-    # 写法差异集中在这里：
-    #   省（自治区、直辖市） == 省市    市(地区、州) == 地市
-    #   县(区) == 区县                  乡(镇、街道办事处)/乡镇、街道 == 街道乡镇
-    #   村(街、路、弄等)/村、街、路、弄 == 村街路弄
-    #   门牌号码 == 门牌                邮政编码/邮编 == 邮政代码
-    # 顺序敏感：长词在前（省（自治区、直辖市） 先于 省市 无关，但 门牌号码
-    # 先于 门牌；邮编 与 邮政编码 互不包含，任意顺序）。
-    _ADDR_COMPONENT_PAIRS = [
-        ('省（自治区、直辖市）', '省市'),
-        ('省(自治区、直辖市)', '省市'),
-        ('市(地区、州)', '地市'),
-        ('市（地区、州）', '地市'),
-        ('乡(镇、街道办事处)', '街道乡镇'),
-        ('乡（镇、街道办事处）', '街道乡镇'),
-        ('乡镇、街道', '街道乡镇'),
-        ('村、街、路、弄', '村街路弄'),
-        ('村(街、路、弄等)', '村街路弄'),
-        ('村（街、路、弄等）', '村街路弄'),
-        ('门牌号码', '门牌'),
-        ('邮政编码', '邮政代码'),
-        ('邮编', '邮政代码'),
-    ]
-    # 地址位置同义词（先长后短）：源标准的写法 -> 目标省平台的写法。
-    #   现住址/现住 == 居住地     户籍地址 == 户籍地
-    #   单位地址/工作单位及地址 == 单位    联系人地址 == 联系人
-    _ADDR_LOC_PAIRS = [
-        ('工作单位及地址', '单位'),
-        ('联系人地址', '联系人'),
-        ('户籍地址', '户籍地'),
-        ('单位地址', '单位'),
-        ('家庭地址', '家庭'),
-        ('现住址', '居住地'),
-        ('现住', '居住地'),
-    ]
 
     @classmethod
-    def _global_norm_base(cls, cn: str) -> str:
-        """归一化并剥离尾部种类词，得到跨表比对用的基名。"""
-        s = cn or ''
-        for a, b in cls._GLOBAL_NORM_PAIRS:
-            s = s.replace(a, b)
-        for ch in cls._GLOBAL_NOISE_CHARS:
-            s = s.replace(ch, '')
-        for k in sorted(cls._GLOBAL_TAIL_KINDS, key=len, reverse=True):
-            if s.endswith(k) and len(s) > len(k):
-                s = s[:-len(k)]
-                break
-        return s.strip()
+    def _global_norm_base(cls, cn):
+        """实现已移至 matchers/global_lookup.norm_base（P1-2 第三刀拆分）。"""
+        return global_lookup.norm_base(cn)
+
 
     @classmethod
-    def _global_semantic_base(cls, cn: str) -> str:
-        """归一化并剥离前缀，得到全局语义兜底用的基名。
+    def _global_semantic_base(cls, cn):
+        """实现已移至 matchers/global_lookup.semantic_base（P1-2 第三刀拆分）。"""
+        return global_lookup.semantic_base(cn)
 
-        与 _global_norm_base 的差异（针对实测 3429 新增字段的三大漏配源）：
-        1. 地址组件/位置同义词归一：出生地-省市代码 == 出生地（省市）、
-           户籍地-门牌号码 == 户籍地址（门牌号码）、居住地-详细地址 == 现住详细地址。
-        2. 尾部种类词"有条件剥离"：剩余基名 >= 4 字才剥。避免 就诊流水号 ->
-           就诊（源 26 个候选、歧义）、患者姓名 -> 患者（源 118 个候选）这类
-           过度剥离把唯一性闸门直接废掉。
-        3. 前缀"有条件剥离"：剩余基名 >= 4 字才剥，且地址位置前缀（出生地/
-           户籍地/居住地/常住地…）受保护不剥——它们是地址组件族的消歧关键。
-        """
-        s = cn or ''
-        # 1. 基础同义归一 + 全角括号归一
-        for a, b in cls._GLOBAL_NORM_PAIRS:
-            s = s.replace(a, b)
-        # 2. 地址组件同义词（长词在前）
-        for a, b in cls._ADDR_COMPONENT_PAIRS:
-            s = s.replace(a, b)
-        # 3. 地址位置同义词（长词在前）
-        for a, b in cls._ADDR_LOC_PAIRS:
-            s = s.replace(a, b)
-        # 4. 去噪（含括号与连字符：出生地-省市代码 -> 出生地省市代码）
-        for ch in cls._GLOBAL_NOISE_CHARS + '()（）-－—':
-            s = s.replace(ch, '')
-        # 5. 尾部种类词：仅当剩余基名 >= 4 才剥离
-        for k in sorted(cls._GLOBAL_TAIL_KINDS, key=len, reverse=True):
-            if s.endswith(k) and len(s) - len(k) >= 4:
-                s = s[:-len(k)]
-                break
-        # 6. 前缀剥离：仅当剩余基名 >= 4；地址位置前缀受保护
-        changed = True
-        while changed:
-            changed = False
-            s2 = re.sub(r'^[\-—、·\s]+', '', s)
-            for p in cls._GLOBAL_LEAD_PREFIXES:
-                if s2.startswith(p) and len(s2) - len(p) >= 4:
-                    s2 = s2[len(p):]
-                    s2 = re.sub(r'^[\-—、·\s]+', '', s2)
-                    changed = True
-                    break
-            s = s2
-        return s.strip()
 
-    # ===== 陈旧正向映射治理（P5）=====
-    _EN_NORM_PAIRS = [('doctor', 'dr'), ('department', 'dept'), ('number', 'no'),
-                      ('code', 'no'), ('identity', 'id'), ('identifier', 'id')]
 
-    # P5 局部同义归一：只用于"知识库映射体检"，不影响主匹配链路。
-    # 覆盖实测中导致误报的同义写法差异。
-    # 顺序敏感：长词在前（身份证件 -> 证件，避免 身份证 先命中留下"证件件"）
-    _P5_NORM_PAIRS = [('病人', '患者'), ('号码', '号'),
-                      ('职工', '人员'), ('员工', '人员'), ('工号', '人员代码'),
-                      ('身份证件', '证件'), ('身份证', '证件'),
-                      ('药物', '药品'), ('药械', '药品')]
 
     @classmethod
-    def _en_core(cls, n: str) -> str:
-        s = (n or '').lower().replace('_', '')
-        for a, b in cls._EN_NORM_PAIRS:
-            s = s.replace(a, b)
-        return s
+    def _en_core(cls, n):
+        """实现已移至 matchers/global_lookup.en_core（P1-2 第三刀拆分）。"""
+        return global_lookup.en_core(n)
+
 
     @classmethod
-    def _p5_norm(cls, cn: str) -> str:
-        """体检用同义归一（全局归一对 + P5 局部补充）。"""
-        s = cn or ''
-        for a, b in cls._GLOBAL_NORM_PAIRS:
-            s = s.replace(a, b)
-        for a, b in cls._P5_NORM_PAIRS:
-            s = s.replace(a, b)
-        return s
+    def _p5_norm(cls, cn):
+        """实现已移至 matchers/global_lookup.p5_norm（P1-2 第三刀拆分）。"""
+        return global_lookup.p5_norm(cn)
+
 
     def _user_custom_hard_conflict(self, target_field: StandardField,
                                    source_field: StandardField) -> str:
