@@ -31,22 +31,46 @@ keywords: 数据模型比对 标准比对 数据标准比对 模型比对 对比
 
 # 数据模型比对
 
+## 职责分层（先读）
+
+**解析阶段没有程序；比对阶段才用程序。**
+
+| 阶段 | 谁做 | 说明 |
+|---|---|---|
+| 读原始标准（docx/doc/xlsx/pdf）→ 规范化 MD/JSON | **模型** | 按 [references/doc_parse_spec.md](references/doc_parse_spec.md) 执行：该文件是**输出契约**，规定了规范化 MD 的语法、唯一可用的列名集合、每列取值规范、交付前 9 项自检 |
+| 规范化 MD/JSON → 内部结构 | 程序 | 按契约**确定性装载**，不做任何文档格式猜测 |
+| 字段匹配 / 约束与长度保护 / 值域覆盖 / 报告 | 程序 | 本 SKILL 的主体能力 |
+
+> **两条硬约束**
+> 1. **禁止**为适配某份文档的表头去改 `parsers/standard_parser.py` 的列名判定逻辑；
+>    遇到新表头 → 改 `doc_parse_spec.md` 的别名表，由模型在解析时归一化。
+> 2. **禁止**写"自动提取标准文档"的脚本——解析是模型的活。
+>    `parsers/converter.py`、`parsers/word_parser.py`、`parsers/excel_parser.py`
+>    属于**遗留兼容路径**，主流程不再依赖它们理解文档格式。
+
+**标准执行顺序**
+
+1. 模型读原始标准 → 产出 `temp/normalized/source_*.md` 与 `target_*.md`；
+2. 模型按规范第 6 节做 9 项自检，并把结论写进对话；
+3. 自检通过后再跑下面的命令（输入是**规范化 MD**，不是原始 docx）；
+4. 程序解析出 0 表 / 字段数异常 → 回到第 1 步修规范化文件，不许带病比对。
+
 ## 执行方式（唯一入口）
 
-**直接运行脚本，不要自己写代码：**
+**直接运行脚本，不要自己写代码。** 输入是**模型按解析说明产出的规范化 MD**：
 
 ```bash
 python3 <skill_root>/main.py \
-  --source <原标准文件路径> \
-  --target <目标标准文件路径> \
+  --source <temp/normalized/source_xxx.md> \
+  --target <temp/normalized/target_xxx.md> \
   --title <报告标题>
 ```
 
 **多文件比对：**
 ```bash
 python3 <skill_root>/main.py \
-  --source <原标准文件1> <原标准文件2> \
-  --target <目标标准文件>
+  --source <source_1.md> <source_2.md> \
+  --target <target_xxx.md>
 ```
 
 **参数说明：**
@@ -57,11 +81,13 @@ python3 <skill_root>/main.py \
 | `--title` | 报告标题 | 否 |
 | `-c, --config` | 配置文件路径 | 否 |
 
-**支持的文件格式：** `.docx` `.xlsx` `.pdf` `.md`
+**推荐输入：** `.md`（规范化 MD，主路径，程序只做契约装载）
+**遗留兼容：** `.docx` `.xlsx` `.pdf`（由 `parsers/converter.py` 转 MD，仅在确无必要人工规范化时使用；
+`.doc` 不可用——macOS 下转换必丢表格，须先请人另存为 `.docx`）
 
 脚本会自动执行：
-1. 格式转换（Word/Excel/PDF → MD）
-2. 标准化解析（提取表结构、字段、值域 → JSON）
+1. ~~格式转换~~（输入为规范化 MD 时此步仅复制文件；输入为 docx/xlsx/pdf 时才走遗留转换）
+2. 标准化装载（规范化 MD → 表结构/字段/值域 JSON）
 3. 比对（字段匹配 + 约束检查 + 值域覆盖）
 4. 两个独立维度的补充比对：
    - 值域字典（代码表）比对：解析双方向域字典，按标准号/规范化名称配对，计算代码覆盖率（完全覆盖/部分覆盖/仅目标有/仅源有），输出 `value_domain_report.md`

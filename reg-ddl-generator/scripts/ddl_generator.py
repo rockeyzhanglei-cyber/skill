@@ -469,6 +469,32 @@ def _build_field_type_str(orig_type, length):
     else:
         return orig_type
 
+def _desc_type_str(field, case_style):
+    """构建【注释清单】中的字段类型串（v4.7.0）
+
+    统一使用 map_type 已映射完成的 db_type（如 Oracle 的 varchar2(100)、number(18,3)），
+    并与脚本大小写格式一致。避免顶部清单与脚本块注释出现 VARCHAR / varchar2 两种写法。
+    回退：db_type 缺失时按原始 data_type + length 组装。
+    """
+    type_str = field.get('db_type', '')
+    if not type_str:
+        type_str = _build_field_type_str(field['data_type'], field['length'])
+    return apply_case(type_str, case_style)
+
+def _build_column_comment(field_cn, comment):
+    """构建字段注释文本（v4.7.0）：中文名 + 说明
+
+    说明为空时只返回中文名；不为空时用全角冒号拼接：'居民健康卡号：患者持有的…'。
+    会清理不可见字符与换行，避免破坏 COMMENT 语句。
+    """
+    field_cn = clean_invisible_chars(field_cn or '')
+    comment = clean_invisible_chars(comment or '')
+    # 换行/制表符折叠为空格，避免注释语句被截断
+    comment = re.sub(r'\s+', ' ', comment).strip()
+    if not comment:
+        return field_cn
+    return f"{field_cn}：{comment}"
+
 def generate_oracle_combined_field_ddl(table_en, table_cn, fields, case_style, include_tran_log=True, include_comments=True):
     """生成Oracle多字段合并DDL
 
@@ -525,7 +551,7 @@ def generate_oracle_combined_field_ddl(table_en, table_cn, fields, case_style, i
     for f in fields:
         field_cn = clean_invisible_chars(f['field_cn'])
         field_en = clean_invisible_chars(f['field_en'])
-        type_str = _build_field_type_str(f['data_type'], f['length'])
+        type_str = _desc_type_str(f, case_style)
         required_cn = clean_invisible_chars(f['required_cn'])
         field_desc_parts.append(f"{field_cn}[{field_en},{type_str},{required_cn}]")
     field_desc = '、'.join(field_desc_parts)
@@ -548,7 +574,8 @@ def generate_oracle_combined_field_ddl(table_en, table_cn, fields, case_style, i
         ddl += f"        {KW_IF} {KW_V_COUNT} = 0 {KW_THEN}\n"
         ddl += f"            {KW_EXECUTE} {KW_IMMEDIATE} '{KW_ALTER} {KW_TABLE} {table_name} {KW_ADD} {field_name} {db_type} {KW_NULL}';\n"
         if include_comments:
-            ddl += "            " + oracle_comment_ddl('COLUMN', table_name + "." + field_name, field_cn, case_style) + "\n"
+            column_comment = _build_column_comment(field_cn, f.get('comment', ''))
+            ddl += "            " + oracle_comment_ddl('COLUMN', table_name + "." + field_name, column_comment, case_style) + "\n"
         ddl += f"        {KW_END} {KW_IF};\n"
 
     ddl += f"    {KW_END} {KW_IF};\n"
@@ -1011,7 +1038,7 @@ def generate_sqlserver_combined_field_ddl(table_en, table_cn, fields, case_style
     for f in fields:
         field_cn = clean_invisible_chars(f['field_cn'])
         field_en = clean_invisible_chars(f['field_en'])
-        type_str = _build_field_type_str(f['data_type'], f['length'])
+        type_str = _desc_type_str(f, case_style)
         required_cn = clean_invisible_chars(f['required_cn'])
         field_desc_parts.append(f"{field_cn}[{field_en},{type_str},{required_cn}]")
     field_desc = '、'.join(field_desc_parts)
@@ -1841,8 +1868,12 @@ def generate_revision_record_new_tables(new_tables):
         records.append(record)
     return records
 
-def generate_revision_record_add_fields(all_changes):
-    """生成新增字段修订记录（使用原文档类型，不转换）
+def generate_revision_record_add_fields(all_changes, case_style='upper'):
+    """生成新增字段修订记录
+
+    v4.7.0：类型串统一取 map_type 映射后的 db_type，并按 case_style 统一大小写，
+    保证顶部清单与脚本块注释逐字一致（如 Oracle 均为 VARCHAR2(100)）。
+    字段项顺序：[字段代码,类型,填报要求]
 
     会自动清理表名、字段名中的不可见字符
     """
@@ -1859,19 +1890,8 @@ def generate_revision_record_add_fields(all_changes):
             # 清理不可见字符
             field_cn = clean_invisible_chars(f['field_cn'])
             field_en = clean_invisible_chars(f['field_en'])
-            # 优先使用 map_type 已映射好的 db_type（含默认长度等fallback处理）
-            type_str = f.get('db_type', '')
-            if not type_str:
-                orig_type = clean_invisible_chars(f['data_type'])
-                length = clean_invisible_chars(f['length']) if f['length'] else ''
-                is_valid_length = length and re.match(r'^[\d,\.\s]+$', length.strip())
-                no_length_types = ['DATETIME', 'DATE', 'TIMESTAMP', 'TEXT', 'CLOB', 'BLOB']
-                if orig_type.upper() in no_length_types:
-                    type_str = orig_type
-                elif is_valid_length:
-                    type_str = f"{orig_type}({length.strip()})"
-                else:
-                    type_str = orig_type
+            # 优先使用 map_type 已映射好的 db_type（含默认长度等fallback处理），并统一大小写
+            type_str = _desc_type_str(f, case_style)
             # 字段名使用原文格式，必填/应填使用原文
             required_cn = clean_invisible_chars(f['required_cn'])
             field_str = f"{field_cn}[{field_en},{type_str},{required_cn}]"
@@ -2046,8 +2066,10 @@ def generate_full_script(parse_result, db_type, case_style, doc_name, output_pat
     modify_field_gen = modify_field_generators.get(db_type_lower, generate_oracle_modify_field_ddl)
     delete_field_gen = delete_field_generators.get(db_type_lower, generate_oracle_delete_field_ddl)
 
-    # Oracle 用户选择不生成 COMMENT 注释（避免 ORA-00904 等字典缓存问题），其余库仍生成注释
-    oracle_kwargs = {'include_comments': False} if db_type_lower == 'oracle' else {}
+    # v4.7.0：Oracle 恢复生成 COMMENT 注释。
+    # 说明：曾因 ORA-00904（同一 PL/SQL 块内新加字段在数据字典中暂不可见）而关闭，
+    # 现 oracle_comment_ddl 已改用「嵌套 EXECUTE IMMEDIATE 匿名块」规避该问题，故与其余库保持一致生成注释。
+    oracle_kwargs = {}
 
     # 预处理：转换类型
     for nt in new_tables:
@@ -2077,7 +2099,7 @@ def generate_full_script(parse_result, db_type, case_style, doc_name, output_pat
                 f.write(record + "\n")
 
         # 新增字段记录
-        for record in generate_revision_record_add_fields(all_changes):
+        for record in generate_revision_record_add_fields(all_changes, case_style):
             f.write(record + "\n")
 
         # 修改字段记录
@@ -2154,14 +2176,7 @@ def generate_full_script(parse_result, db_type, case_style, doc_name, output_pat
                     if include_tran_log:
                         ddl_count_sync += 2  # TRAN 和 LOG
 
-        # 统计信息（根据用户选择动态显示）
-        tran_log_suffix = "(含TRAN/LOG同步)" if include_tran_log else ""
-        public_suffix = "(含公共字段)" if include_public_fields else ""
-        f.write(f"-- 新增表: {len(new_tables)} 个 {tran_log_suffix}{public_suffix}\n")
-        f.write(f"-- 新增字段: {ddl_count_add_fields} 个 {tran_log_suffix}\n")
-        f.write(f"-- 修改字段: {ddl_count_modify_fields} 个\n")
-        f.write(f"-- 删除字段: {ddl_count_delete_fields} 个（置为非必填）{tran_log_suffix}\n")
-        f.write(f"-- DDL总数: {ddl_count_new_tables + ddl_count_add_fields + ddl_count_modify_fields + ddl_count_delete_fields} 个\n")
+        # v4.7.0：文件末尾不再输出统计信息（规范要求脚本只保留变更清单与可执行语句）
 
     return {
         'output_path': output_path,

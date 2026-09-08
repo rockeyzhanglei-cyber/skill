@@ -49,10 +49,10 @@ end;
 **SQL Server 新增字段示例（全大写）**：
 ```sql
 /*
-表名中文[表名]新增字段：字段名中文[字段代码,应填,VARCHAR(50)]、字段名中文[字段代码,应填,VARCHAR(100)]
+表名中文[表名]新增字段：字段名中文[字段代码,VARCHAR(50),应填]、字段名中文[字段代码,VARCHAR(100),应填]
 */
 
--- 表名中文[表名]新增字段：字段名中文[字段代码,应填,VARCHAR(50)]、字段名中文[字段代码,应填,VARCHAR(100)]
+-- 表名中文[表名]新增字段：字段名中文[字段代码,VARCHAR(50),应填]、字段名中文[字段代码,VARCHAR(100),应填]
 IF EXISTS (SELECT * FROM SYS.TABLES WHERE NAME = '表名')
 BEGIN
     IF NOT EXISTS (SELECT * FROM SYS.COLUMNS WHERE OBJECT_ID = OBJECT_ID('表名') AND NAME = '字段1')
@@ -84,10 +84,10 @@ GO
 **SQL Server 新增字段示例（全小写）**：
 ```sql
 /*
-表名中文[表名]新增字段：字段名中文[字段代码,应填,varchar(50)]、字段名中文[字段代码,应填,varchar(100)]
+表名中文[表名]新增字段：字段名中文[字段代码,VARCHAR(50),应填]、字段名中文[字段代码,VARCHAR(100),应填]
 */
 
--- 表名中文[表名]新增字段：字段名中文[字段代码,应填,varchar(50)]、字段名中文[字段代码,应填,varchar(100)]
+-- 表名中文[表名]新增字段：字段名中文[字段代码,VARCHAR(50),应填]、字段名中文[字段代码,VARCHAR(100),应填]
 if exists (select * from sys.tables where name = '表名')
 begin
     if not exists (select * from sys.columns where object_id = object_id('表名') and name = '字段1')

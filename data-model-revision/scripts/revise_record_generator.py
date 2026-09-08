@@ -125,7 +125,7 @@ def generate_revise_summary(parse_result):
 
     字段项格式与批量排版以 `references/bms-script-spec.md`《注释规范》为准：
     - 新增表：表名中文[表名] - 新增表
-    - 新增字段：表名中文[表名]新增字段：字段名中文[字段代码,填报要求,数据类型,表示格式]
+    - 新增字段：表名中文[表名]新增字段：字段名中文[字段代码,数据类型,填报要求]（类型项全大写）
     - 修改字段：表名中文[表名]修改字段：字段名中文[字段代码]（旧→新），每字段独立一行
     - 同表多字段顿号合一行
     """
@@ -152,7 +152,8 @@ def generate_revise_summary(parse_result):
             field_strs.append(f"{field_cn}[{field_en},{data_type},{required_cn}]")
 
         if field_strs:
-            summary_lines.append(f"{table_cn}[{table_en}]新增字段：{','.join(field_strs)}")
+            # 同表多字段用顿号（、）合一行（bms-script-spec.md 1.3 批量写法）
+            summary_lines.append(f"{table_cn}[{table_en}]新增字段：{'、'.join(field_strs)}")
 
     # 修改字段
     for mod in parse_result.get('modified_fields', []):
