@@ -1,6 +1,29 @@
-# 变更记录
+# 历史修复档案
 
-> 本文件记录 skill 的历史修复与改进，不参与上下文加载。
+> 本文件记录 skill 的历史修复与改进，不参与上下文加载，仅供追溯判据来龙去脉。
+
+## 2026-09-08: 保守修复明显错误（v1.4.0 → v1.5.0）
+
+> 背景：架构已切换为「解析靠说明（模型按 doc_parse_spec.md 产出规范化 MD）、比对靠程序」，
+> 但文档多处仍描述旧解析器架构，本次只修错、不动结构。
+
+- **SKILL.md version** 1.4.0 → 1.5.0
+- **职责分层**：改为三阶段表（模型解析 → 程序装载 → 程序比对）+ 两条硬约束
+  （禁改 standard_parser.py 列名判定逻辑、禁写自动提取脚本）；标注 converter.py /
+  word_parser.py / excel_parser.py 为遗留兼容路径
+- **执行方式**：唯一入口改为输入规范化 MD；标注 .doc 不可用（macOS 转换必丢表格）
+- **四种工作模式**：原文写"三种"，实际有四个（比对/测试/验证/人工核对）；补充模式前置说明
+- **FAQ Q1（PDF）**：改为新架构（模型读 PDF 产出规范化 MD）；保留旧 parsers.pdf.primary
+  路径说明并标注 config.yaml 已无 parsers 配置段
+- **FAQ Q3（跨表关联）**：修正 `relations.yaml`（单文件，不存在）→ `relations/` 目录
+  （generic.yaml + source_yunnan_v5.5.yaml）
+- **错误处理**：新增第 6 条「解析出 0 表 / 0 字段」排查步骤（列名归一化 → 约束值 M →
+  表格语法 → 重新解析）；标注 on_failure=warn 时 0 表也会产出空报告，须立即中止
+- **扩展点**：「添加新解析器」标注已废弃，改为「更新 doc_parse_spec.md 别名表」
+- **核心功能与安装**：依赖清单修正——实际依赖 pyyaml/pandas/openpyxl/python-docx/
+  pdfplumber/psutil，删除未使用的 marker-pdf
+- **references/install.md**：重写——标题「核心功能概述」改为「依赖安装」（与文件名/用途一致）；
+  删除与新架构冲突的「自动选择最佳解析器」；补全被截断的代码块；按实测依赖重列清单
 
 ## V6.0医疗服务 vs 省平台v1.4.1 医疗部分
 
@@ -76,3 +99,19 @@
 - 新增 `matchers/matching_core.py`：核心概念判定/显式同义判定/词表唯一实现
 - 比对器+自验证器委托公共模块，差异显式参数化
 - 验证：15万对抽样行为零变化，乌疆端到端漏配144/可疑163复现
+
+### 2026-09-09: v2.0.1 架构一致性优化（三处双路径收拢）
+
+- **回写单一路径**：`main.py --feedback` 改为只读分析（调 read_modified_excel.py
+  输出知识库写入指令后退出），删除对 read_excel_feedback.py 自动回写的调用；
+  旧脚本归档为 scripts/archive/read_excel_feedback_auto_writeback.py。
+  回写唯一路径 = 模型按 SKILL.md 模式四执行。
+- **知识库装载收拢 manager**：删除 comparator 的死方法 _load_table_synonyms /
+  _load_field_mappings / _load_numbered_field_groups / 模块级 _load_relations
+  （均零调用点，约 160 行）；multi_source_tables 改经 manager 装载
+  （新增 kb.multi_source_tables 属性，aliases 展开逻辑等价迁移）。
+- **修复 learned_mappings 失效 bug**：原赋值代码在被删除的死方法 _load_synonyms
+  内，导致"已学习表映射"最高优先级从未生效；现统一经 kb.learned_mappings 装载
+  （32 条 + 2 条 _alt），_find_matching_table 优先级 0 首次真正可用。
+  V6.0 任务指纹零变化（V5.5 拼音表名在该任务不命中），乌疆任务后续观察。
+- 验证：AST 9 模块通过；test_runner 27/27；regression_check 5349 指纹零变化。

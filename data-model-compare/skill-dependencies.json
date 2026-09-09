@@ -1,0 +1,223 @@
+{
+  "schema_version": "1",
+  "capabilities": [
+    "比对主流程",
+    "配置与知识库装载",
+    "Excel 人工核对产物",
+    "遗留文档格式转换",
+    "性能监控"
+  ],
+  "functional_degradations": [
+    {
+      "capability": "Excel 人工核对产物",
+      "trigger": "pandas 或 openpyxl 导入失败",
+      "fallback": "跳过 Excel 生成步骤，仅产出 HTML/MD 报告；人工核对改由模型按报告逐表输出映射清单",
+      "user_input": "无需补充",
+      "limitations": "模式四的 Excel 下拉框核对不可用",
+      "evidence_label": "推断",
+      "recovery": "pip install pandas openpyxl 后重跑比对",
+      "stop_condition": "用户明确要求必须产出 Excel 而依赖无法安装"
+    },
+    {
+      "capability": "遗留文档格式转换",
+      "trigger": "python-docx 或 pdfplumber 导入失败，且输入为 .docx/.pdf",
+      "fallback": "由模型按 references/doc_parse_spec.md 直接阅读原文档产出规范化 MD（主路径，不依赖转换器）",
+      "user_input": "无需补充",
+      "limitations": "转换精度依赖模型解析质量，产出后需按规范第 6 节自检",
+      "evidence_label": "已验证",
+      "recovery": "pip install python-docx pdfplumber 后可恢复遗留路径",
+      "stop_condition": "文档为扫描版 PDF 且无 OCR 结果时停止，请人工提供文字版"
+    },
+    {
+      "capability": "性能监控",
+      "trigger": "psutil 导入失败",
+      "fallback": "静默跳过性能监控，比对结果不受影响",
+      "user_input": "无需补充",
+      "limitations": "无性能数据输出",
+      "evidence_label": "已验证",
+      "recovery": "pip install psutil",
+      "stop_condition": "无（不影响核心正确性）"
+    },
+    {
+      "capability": "配置与知识库装载",
+      "trigger": "pyyaml 导入失败",
+      "fallback": "无可靠降级",
+      "user_input": "无需补充",
+      "limitations": "主流程无法运行",
+      "evidence_label": "已验证",
+      "recovery": "pip install pyyaml",
+      "stop_condition": "pyyaml 缺失时停止主流程"
+    },
+    {
+      "capability": "比对主流程",
+      "trigger": "Python 缺失或版本低于 3.8",
+      "fallback": "无可靠降级",
+      "user_input": "安装 Python >= 3.8",
+      "limitations": "主流程无法运行",
+      "evidence_label": "已验证",
+      "recovery": "从 https://www.python.org/downloads/ 安装后重检",
+      "stop_condition": "Python 缺失时停止主流程"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "python-runtime",
+      "type": "runtime",
+      "required": true,
+      "auth_type": "none",
+      "capabilities": ["比对主流程", "配置与知识库装载", "Excel 人工核对产物", "遗留文档格式转换", "性能监控"],
+      "checks": [
+        {"id": "python-version", "type": "cli", "required": true, "command": "python3", "min_version": "3.8"}
+      ],
+      "setup": {
+        "official_home_url": "https://www.python.org/",
+        "official_docs_url": "https://docs.python.org/3/",
+        "download_url": "https://www.python.org/downloads/",
+        "steps": ["访问 python.org/downloads 下载对应系统安装包", "安装时勾选 Add to PATH（Windows）", "终端运行 python3 --version 确认 >= 3.8"],
+        "verify": "python3 --version 输出 >= 3.8",
+        "security": "仅使用官方安装包，不使用第三方分发的解释器",
+        "verified_at": "2026-09-08",
+        "applies_to_version": "3.8-3.14"
+      },
+      "degradation": [
+        {"capability": "比对主流程", "trigger": "Python 缺失", "fallback": "无可靠降级", "user_input": "安装 Python >= 3.8", "limitations": "主流程停止", "evidence_label": "已验证", "recovery": "安装后重检", "stop_condition": "Python 缺失时停止"},
+        {"capability": "配置与知识库装载", "trigger": "Python 缺失", "fallback": "无可靠降级", "user_input": "安装 Python >= 3.8", "limitations": "主流程停止", "evidence_label": "已验证", "recovery": "安装后重检", "stop_condition": "Python 缺失时停止"},
+        {"capability": "Excel 人工核对产物", "trigger": "Python 缺失", "fallback": "无可靠降级", "user_input": "安装 Python >= 3.8", "limitations": "产物生成停止", "evidence_label": "已验证", "recovery": "安装后重检", "stop_condition": "Python 缺失时停止"},
+        {"capability": "遗留文档格式转换", "trigger": "Python 缺失", "fallback": "由宿主模型直接阅读文档产出规范化 MD（不依赖 Python）", "user_input": "无需补充", "limitations": "仅解析阶段可用，比对阶段仍需 Python", "evidence_label": "推断", "recovery": "安装后重检", "stop_condition": "Python 缺失时比对阶段停止"},
+        {"capability": "性能监控", "trigger": "Python 缺失", "fallback": "无可靠降级", "user_input": "安装 Python >= 3.8", "limitations": "全部功能停止", "evidence_label": "已验证", "recovery": "安装后重检", "stop_condition": "Python 缺失时停止"}
+      ]
+    },
+    {
+      "id": "pyyaml",
+      "type": "local-tool",
+      "required": true,
+      "auth_type": "none",
+      "capabilities": ["配置与知识库装载"],
+      "checks": [
+        {"id": "yaml-import", "type": "python", "required": true, "command": "import yaml"}
+      ],
+      "setup": {
+        "official_home_url": "https://pyyaml.org/",
+        "official_docs_url": "https://pyyaml.org/wiki/PyYAMLDocumentation",
+        "steps": ["运行 pip install pyyaml", "python3 -c 'import yaml' 验证"],
+        "verify": "python3 -c 'import yaml; print(yaml.__version__)'",
+        "security": "仅从 PyPI 官方源安装",
+        "verified_at": "2026-09-08",
+        "applies_to_version": "6.x"
+      },
+      "degradation": [
+        {"capability": "配置与知识库装载", "trigger": "pyyaml 缺失", "fallback": "无可靠降级", "user_input": "无需补充", "limitations": "主流程停止", "evidence_label": "已验证", "recovery": "pip install pyyaml", "stop_condition": "缺失时停止主流程"}
+      ]
+    },
+    {
+      "id": "pandas",
+      "type": "local-tool",
+      "required": true,
+      "auth_type": "none",
+      "capabilities": ["Excel 人工核对产物"],
+      "checks": [
+        {"id": "pandas-import", "type": "python", "required": true, "command": "import pandas"}
+      ],
+      "setup": {
+        "official_home_url": "https://pandas.pydata.org/",
+        "official_docs_url": "https://pandas.pydata.org/docs/",
+        "steps": ["运行 pip install pandas"],
+        "verify": "python3 -c 'import pandas; print(pandas.__version__)'",
+        "security": "仅从 PyPI 官方源安装",
+        "verified_at": "2026-09-08",
+        "applies_to_version": "2.x"
+      },
+      "degradation": [
+        {"capability": "Excel 人工核对产物", "trigger": "pandas 缺失", "fallback": "跳过 Excel 生成，仅产出 HTML/MD 报告", "user_input": "无需补充", "limitations": "模式四 Excel 核对不可用", "evidence_label": "推断", "recovery": "pip install pandas openpyxl", "stop_condition": "用户必须产出 Excel 而依赖无法安装"}
+      ]
+    },
+    {
+      "id": "openpyxl",
+      "type": "local-tool",
+      "required": true,
+      "auth_type": "none",
+      "capabilities": ["Excel 人工核对产物"],
+      "checks": [
+        {"id": "openpyxl-import", "type": "python", "required": true, "command": "import openpyxl"}
+      ],
+      "setup": {
+        "official_home_url": "https://openpyxl.readthedocs.io/",
+        "official_docs_url": "https://openpyxl.readthedocs.io/en/stable/",
+        "steps": ["运行 pip install openpyxl"],
+        "verify": "python3 -c 'import openpyxl; print(openpyxl.__version__)'",
+        "security": "仅从 PyPI 官方源安装",
+        "verified_at": "2026-09-08",
+        "applies_to_version": "3.x"
+      },
+      "degradation": [
+        {"capability": "Excel 人工核对产物", "trigger": "openpyxl 缺失", "fallback": "跳过 Excel 生成，仅产出 HTML/MD 报告", "user_input": "无需补充", "limitations": "模式四 Excel 核对不可用", "evidence_label": "推断", "recovery": "pip install openpyxl", "stop_condition": "用户必须产出 Excel 而依赖无法安装"}
+      ]
+    },
+    {
+      "id": "python-docx",
+      "type": "local-tool",
+      "required": false,
+      "auth_type": "none",
+      "capabilities": ["遗留文档格式转换"],
+      "checks": [
+        {"id": "docx-import", "type": "python", "required": false, "command": "import docx"}
+      ],
+      "setup": {
+        "official_home_url": "https://python-docx.readthedocs.io/",
+        "official_docs_url": "https://python-docx.readthedocs.io/en/latest/",
+        "steps": ["运行 pip install python-docx"],
+        "verify": "python3 -c 'import docx'",
+        "security": "仅从 PyPI 官方源安装",
+        "verified_at": "2026-09-08",
+        "applies_to_version": "1.x"
+      },
+      "degradation": [
+        {"capability": "遗留文档格式转换", "trigger": "python-docx 缺失且输入为 .docx", "fallback": "模型按 doc_parse_spec.md 直接阅读产出规范化 MD", "user_input": "无需补充", "limitations": "解析质量依赖模型，需按规范自检", "evidence_label": "已验证", "recovery": "pip install python-docx", "stop_condition": "扫描版且无文字层时停止"}
+      ]
+    },
+    {
+      "id": "pdfplumber",
+      "type": "local-tool",
+      "required": false,
+      "auth_type": "none",
+      "capabilities": ["遗留文档格式转换"],
+      "checks": [
+        {"id": "pdfplumber-import", "type": "python", "required": false, "command": "import pdfplumber"}
+      ],
+      "setup": {
+        "official_home_url": "https://github.com/jsvine/pdfplumber",
+        "official_docs_url": "https://github.com/jsvine/pdfplumber#readme",
+        "steps": ["运行 pip install pdfplumber"],
+        "verify": "python3 -c 'import pdfplumber'",
+        "security": "仅从 PyPI 官方源安装",
+        "verified_at": "2026-09-08",
+        "applies_to_version": "0.11.x"
+      },
+      "degradation": [
+        {"capability": "遗留文档格式转换", "trigger": "pdfplumber 缺失且输入为 .pdf", "fallback": "模型按 doc_parse_spec.md 直接阅读产出规范化 MD", "user_input": "无需补充", "limitations": "扫描版 PDF 需先 OCR", "evidence_label": "已验证", "recovery": "pip install pdfplumber", "stop_condition": "扫描版且无文字层时停止"}
+      ]
+    },
+    {
+      "id": "psutil",
+      "type": "local-tool",
+      "required": false,
+      "auth_type": "none",
+      "capabilities": ["性能监控"],
+      "checks": [
+        {"id": "psutil-import", "type": "python", "required": false, "command": "import psutil"}
+      ],
+      "setup": {
+        "official_home_url": "https://github.com/giampaolo/psutil",
+        "official_docs_url": "https://psutil.readthedocs.io/",
+        "steps": ["运行 pip install psutil"],
+        "verify": "python3 -c 'import psutil'",
+        "security": "仅从 PyPI 官方源安装",
+        "verified_at": "2026-09-08",
+        "applies_to_version": "7.x"
+      },
+      "degradation": [
+        {"capability": "性能监控", "trigger": "psutil 缺失", "fallback": "静默跳过性能监控", "user_input": "无需补充", "limitations": "无性能数据", "evidence_label": "已验证", "recovery": "pip install psutil", "stop_condition": "无"}
+      ]
+    }
+  ]
+}

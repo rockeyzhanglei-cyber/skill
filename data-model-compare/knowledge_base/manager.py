@@ -85,6 +85,11 @@ class KnowledgeBaseManager:
         return self._cache.get('table_synonyms', {})
 
     @property
+    def multi_source_tables(self) -> Dict[str, dict]:
+        """一表对多源表映射（含 aliases 展开）"""
+        return self._cache.get('multi_source_tables', {})
+
+    @property
     def field_mappings(self) -> Dict[str, dict]:
         """字段映射配置（target_field -> mapping）
 
@@ -226,10 +231,19 @@ class KnowledgeBaseManager:
         self._cache['field_synonyms_exclude'] = list(set(exclude_list))
 
     def _load_table_synonyms(self):
-        """加载表名同义词库"""
+        """加载表名同义词库（含 multi_source_tables 一表对多源表映射）"""
         path = os.path.join(self.kb_dir, 'table_synonyms.yaml')
         data = self._load_yaml_with_cache(path)
         self._cache['table_synonyms'] = data.get('table_synonyms', {}) if data else {}
+        # multi_source_tables：目标表 → 多个源表（按优先级），展开 aliases 供表级路由
+        multi = {}
+        raw_multi = data.get('multi_source_tables', {}) if data else {}
+        for table_name, info in (raw_multi or {}).items():
+            if isinstance(info, dict):
+                multi[table_name] = info
+                for alias in info.get('aliases', []) or []:
+                    multi[alias] = info
+        self._cache['multi_source_tables'] = multi
 
     def _load_field_mappings(self):
         """加载字段映射配置"""

@@ -1,32 +1,11 @@
 ---
 name: data-model-compare
-description: |
-  数据模型比对 - 确保原标准数据无损传输到目标标准，自动生成修订建议。
-
-  **必须触发**（包含以下任一即触发）：
-  - "数据模型比对"、"标准比对"、"数据标准比对"、"模型比对"
-  - "比对这个文档"、"对比两个标准"、"对照两份标准"
-  - "分析数据标准差异"、"标准差异分析"、"diff两个标准"
-  - "无损传输"、"数据上传"、"标准覆盖"
-  - "值域比对"、"值域修订"、"代码表比对"
-  - "数据标准修订报告"、"比对报告"
-  - "标准迁移"、"标准升级"、"版本差异"
-  - "两份标准"、"两个标准"、"从...迁移到..."
-  - "5.X标准"、"6.0标准"、"公版"、"项目化"
-  - "自验证"、"核验比对结果"、"验证比对"、"抽样核验"、"比对自测"
-  - "验证一下结果"、"验证一下"、"检查一下比对"
-  - "测试这个skill"、"测试比对"、"用这套标准测试"
-  - "自动验证"、"自动修复"、"全自动验证"、"不用确认直接改"
-  - 用户提供两个标准文档（Word/Excel/PDF/MD）并要求比对时使用
-  - 比对任务完成后，自动进入自验证流程（无需用户额外触发）
-
-  **不要触发**（由其他Skill处理）：
-  - 单纯的数据模型修订（无目标标准比对）→ 使用 data-model-revision
-  - 生成DDL（无比对需求）→ 使用 reg-ddl-generator
-version: 1.4.0
+description: 数据模型比对，确保原标准数据无损传输到目标标准，自动生成修订建议。触发：数据模型比对、标准比对、数据标准比对、模型比对、比对这个文档、对比两个标准、对照两份标准、标准差异分析、diff两个标准、无损传输、数据上传、标准覆盖、值域比对、值域修订、代码表比对、标准迁移、标准升级、版本差异、两份标准、比对报告、自验证、核验比对结果、验证一下结果、自动验证、自动修复、生成Excel、人工核对、逐表核对。不触发：纯数据模型修订用 data-model-revision，生成DDL用 reg-ddl-generator。
+version: 2.0.0
+agent_created: true
 author: WinAi
 tags: [数据标准, 模型比对, 数据迁移, 值域修订]
-keywords: 数据模型比对 标准比对 数据标准比对 模型比对 对比两个标准 对照两份标准 比对这个文档 值域比对 代码表比对 无损传输 标准迁移 标准升级 版本差异 两份标准 两个标准 比对报告 diff两个标准 标准差异分析 标准覆盖 值域修订 自验证 核验比对结果
+keywords: 数据模型比对 标准比对 数据标准比对 模型比对 对比两个标准 对照两份标准 比对这个文档 值域比对 代码表比对 无损传输 标准迁移 标准升级 版本差异 两份标准 比对报告 diff两个标准 标准差异分析 标准覆盖 值域修订 自验证 核验比对结果 人工核对 生成Excel
 ---
 
 # 数据模型比对
@@ -45,8 +24,8 @@ keywords: 数据模型比对 标准比对 数据标准比对 模型比对 对比
 > 1. **禁止**为适配某份文档的表头去改 `parsers/standard_parser.py` 的列名判定逻辑；
 >    遇到新表头 → 改 `doc_parse_spec.md` 的别名表，由模型在解析时归一化。
 > 2. **禁止**写"自动提取标准文档"的脚本——解析是模型的活。
->    `parsers/converter.py`、`parsers/word_parser.py`、`parsers/excel_parser.py`
->    属于**遗留兼容路径**，主流程不再依赖它们理解文档格式。
+>    `parsers/converter.py` 属于**遗留兼容路径**（docx/xlsx/pdf → MD 的机械转换），
+>    主流程不再依赖它理解文档格式。
 
 **标准执行顺序**
 
@@ -80,6 +59,7 @@ python3 <skill_root>/main.py \
 | `-t, --target` | 目标标准文件路径 | 是 |
 | `--title` | 报告标题 | 否 |
 | `-c, --config` | 配置文件路径 | 否 |
+| `-f, --feedback` | 用户编辑后的 Excel：**只读分析并输出知识库写入指令**，不自动回写（回写由模型按模式四执行；给出此参数时分析完即退出，不继续比对） | 否 |
 
 **推荐输入：** `.md`（规范化 MD，主路径，程序只做契约装载）
 **遗留兼容：** `.docx` `.xlsx` `.pdf`（由 `parsers/converter.py` 转 MD，仅在确无必要人工规范化时使用；
@@ -95,7 +75,8 @@ python3 <skill_root>/main.py \
 5. 生成报告（MD + HTML）
 6. 生成可编辑的Excel文件（用于人工核对；确认后回写知识库，P0 已实现跨表全局复用）
 
-**输出目录：** `<输出根目录>/<任务名>/reports/`（默认 `~/data-model-compare-docs`，可用环境变量 `DATA_STD_OUTPUT` 覆盖）
+**输出目录：** `<输出根目录>/<任务名>/reports/`
+（输出根目录取值优先级：环境变量 `DATA_STD_OUTPUT` > `config.yaml` 的 `workspace.root` > 默认 `~/data-model-compare-docs`）
 
 **输出报告内容：**
 - **HTML报告**：汇总统计 + 目录导航 + 逐表详情 + 颜色标识（🟢满足 🟠需修改 🔴需新增）
@@ -103,24 +84,28 @@ python3 <skill_root>/main.py \
 
 **端到端示例：**
 
-假设你有两份标准文档需要比对：
-- 原标准：`/path/to/区域卫生信息平台数据传输规范_第01部分_医疗服务.docx`
-- 目标标准：`/path/to/全民健康信息平台数据接口标准规范_医疗部分.docx`
-
-执行命令：
 ```bash
 python3 <skill_root>/main.py \
-  --source "/path/to/区域卫生信息平台数据传输规范_第01部分_医疗服务.docx" \
-  --target "/path/to/全民健康信息平台数据接口标准规范_医疗部分.docx" \
-  --title "云南v5.5_vs_省平台v1.4.1"
+  --source "<任务目录>/temp/normalized/source_区域平台V6.0医疗服务.md" \
+  --target "<任务目录>/temp/normalized/target_山东电子病历2018V1.4.md" \
+  --title "区域平台V6.0医疗服务_vs_山东电子病历2018V1.4"
 ```
 
-输出：
-- 报告生成到：`<输出根目录>/云南v5.5_vs_省平台v1.4.1/reports/`（如 `~/data-model-compare-docs/云南v5.5_vs_省平台v1.4.1/reports/`）
-- 包含：`compare_report.html` 和 `compare_report.md`
-- 报告中会显示：满足的字段数、需修改的字段数、需新增的字段数、需新增的表数
+输出到 `<输出根目录>/<任务名>/reports/`，含 `compare_report.html` 和 `compare_report.md`，
+报告中显示满足/需修改/需新增的字段数与需新增的表数。
 
-## 核心原则（5条红线）
+## 环境检查（首次使用先跑）
+
+```bash
+python3 <skill_root>/scripts/check_environment.py
+```
+
+输出 `ready / partial / needs_setup`：ready 直接开始；partial 标注受影响功能继续；
+needs_setup 按 [references/setup-guide.md](references/setup-guide.md) 只补缺失项。
+依赖清单见 [skill-dependencies.json](skill-dependencies.json)，
+依赖与降级细节见 [references/install.md](references/install.md)。
+
+## 核心原则（6条红线）
 
 脚本已内置以下原则，这些规则在代码中强制执行：
 
@@ -130,71 +115,14 @@ python3 <skill_root>/main.py \
 4. **值域覆盖**：原标准值域必须覆盖目标标准，只能扩充，不能修改已有值
 5. **只增不减**：不删除、不重命名原标准已有字段
 6. **人工确认不被静默否决**：知识库里的正向映射是人工领域判断，人是权威。
-   匹配期只能"检测并登记可疑"，不能用启发式规则悄悄推翻它（详见下节）。
+   匹配期只能"检测并登记可疑"，不能用启发式规则悄悄推翻它
+   （理论依据与知识库体检入口见 [references/kb_health.md](references/kb_health.md)）。
 
-## 知识库结论的可复用性边界（重要）
+## 四种工作模式
 
-`knowledge_base/user_custom_mappings.yaml` 的 `created_from` 记录了这批人工确认
-是在**哪一对标准**上做出的。换标准后，两类结论的可复用性完全不同：
-
-| 结论类型 | 例子 | 换源标准后 | 处理策略 |
-|---|---|---|---|
-| **否定结论**（确认"无对应源字段"=新增） | 麻醉分级代码 → 新增 | **不可复用**。新源标准里可能确实有该字段 | 事实优先/弱否决，**三级事实检查**：①精确名 → ②fuzzy 基名 → ③语义基名（`_global_semantic_lookup`，前缀型如 `患者电子邮件地址←电子邮件地址` 只有语义基名一致时才能撤销）。任一命中且说明兼容即撤销确认，登记到 `kb_conflicts.stale_negative`。配置 `stale_negative_override_semantic`（默认 True） |
-| **正向结论**（确认"字段A对应源字段B"） | 医嘱停止医师姓名 ← 停嘱医生姓名 | **原则上可复用**（人工领域判断） | 只检测不否决，可疑项登记到 `kb_conflicts.stale_positive` |
-
-### 为什么正向映射不做静默否决
-
-实测（区域平台60 vs 云南v1.4.1，5576 字段）：给 `user_custom` 加"语义硬冲突网关"
-并直接否决后——
-
-- 只抓到 3 个真错中的 1 个；
-- 却误杀约 40 条**正确的人工确认**（`医嘱停止医师姓名←停嘱医生姓名`、
-  `人员代码←职工编码`、`身份证件类别代码←证件类型`、`居住地-邮政代码←现住址邮编`…）；
-- `new_fields` 从 3451 涨到 3471，净损失覆盖率。
-
-根因：这些"错映射"不是标准版本漂移，而是**当年人工反馈时的误点（知识库脏数据）**，
-例如 `会诊记录-会诊医师.门(急)诊号 ← 姓名`。脏数据要修在知识库里，
-而不是在匹配期靠启发式猜。因此 `user_custom_hard_gate` 默认 `False`（只登记不否决）。
-
-### 知识库体检（修脏数据的正确入口）
-
-```bash
-# 推荐：带上源标准，开启 E2 豁免，误报更低
-python scripts/kb_health_check.py --min-score 2 \
-    --source <temp_dir>/source_standard.json
-```
-
-用三类**按强度加权**的证据交叉定位脏映射（总分越高越可疑，≥2 分才报）：
-
-- **E1a 强语义冲突（2 分）**：字段种类冲突 / 核心概念缺失
-  —— 一侧是裸通用词（`姓名`、`编号`），另一侧带实质限定，是人工误点最典型形态
-  （`主治医师姓名 ← 姓名`、`责任护士代码 ← 责任护士执业证书编码`）
-- **E1b 弱语义冲突（1 分）**：核心概念不相干（双方都有限定但不搭）
-- **E2 库内自相矛盾（1 分）**：同一目标字段在库里有多条非空映射，本条落在少数簇
-  （`生产批号 → {批号, 生产批号, 批准文号}`，`批准文号` 离群）。
-  **豁免**：多数簇的源字段名在本条源表里根本不存在时，说明人工没有同名字段才退而用
-  别名，属合理，不计分（正是这一步干掉了 `就诊类型代码 ← 门诊/住院标志` 的误报）。
-- **E3 同表同名归属冲突（2 分）**：源字段 X 已归属同名目标字段 X，又给了别的目标字段
-  （`不良事件类别名称` 已给 `不良事件类别名称`，又给了 `不良事件报告医师姓名`）。
-  派生字段（子串关系）与主子表流水号继承两类正常形态予以豁免。
-
-输出 `knowledge_base/kb_health_report.json`，**按置信分层**：
-
-- **A-高置信**（大概率误点，建议直接改 yaml）：如 `第一/第二助手姓名←病人姓名`、
-  `患者姓名←性别`、`门(急)诊号←姓名`、`主治医师/住院医师姓名←姓名`、
-  `*医师代码←*执业证书编码` 等。
-- **B-待确认**（一源对多目标，多为合理派生，人工快判即可）：如 `就诊类型代码←门诊/住院标志`、
-  `严重不良事件转归代码←不良事件报告类型代码` 等。
-
-**复核后请直接改 yaml，不要改匹配规则。** 脏数据修在知识库里，比对期只检测不否决
-（见红线第 6 条）。
-
-### 历史修复记录
-
-> **何时读**：排查历史问题、追溯某个判据的来龙去脉、或改动匹配逻辑前了解背景时读（**非日常执行必需**）。
-> 内容：V6.0实测修复、P6多表关联通道、否定确认强判死、自验证降噪、round6条件装配固化、P6外键方向否决、matching_core 重构等，见 [CHANGELOG.md](CHANGELOG.md).
-
-## 三种工作模式
+> **模式前置**：进入任一模式前，先由模型按
+> [references/doc_parse_spec.md](references/doc_parse_spec.md) 把原始标准解析为规范化 MD，
+> 并通过该规范第 6 节的 9 项自检；自检未通过不要进入下面的流程。
 
 根据用户的意图自动选择工作模式：
 
@@ -234,11 +162,12 @@ python scripts/kb_health_check.py --min-score 2 \
    - 条件格式自动显示颜色：绿色=已匹配，红色=需新增
    - 全表新增的表所有行显示红色背景
 3. 用户编辑完成后，将Excel文件保存到原位置（或告诉skill文件路径）
-4. skill读取修改后的Excel，与原始比对结果对比，找出差异
-5. 将差异写入知识库：
-   - 用户修改了源表/源字段映射 → 更新`knowledge_base/field_mappings.yaml`
-   - 用户清空了源字段（表示不应匹配）→ 在`knowledge_base/field_synonyms.yaml`的对应条目中添加`exclude`
-   - 用户新增了映射关系 → 添加到`knowledge_base/field_mappings.yaml`
+4. **模型读取修改后的 Excel**（`scripts/read_modified_excel.py` 负责读出修改行清单），
+   逐条与原始比对结果对比找出差异
+5. **模型把差异写入知识库**（这是模型的活，不走脚本自动回写）：
+   - 用户修改了源表/源字段映射 → 更新 `knowledge_base/field_mappings.yaml`
+   - 用户清空了源字段（表示不应匹配）→ 在 `knowledge_base/field_synonyms.yaml` 对应条目加 `exclude`
+   - 用户新增了映射关系 → 添加到 `knowledge_base/field_mappings.yaml`
 6. 重新运行比对脚本，确保下次生成结果与用户修改一致
 
 **Excel格式说明**：
@@ -246,15 +175,9 @@ python scripts/kb_health_check.py --min-score 2 \
 - 源表和源字段列有下拉框，可从原标准中选择（级联下拉）
 - 条件格式：绿色=已匹配（源表和源字段都有值），红色=需新增（源表有值但源字段为空）
 - 全表新增的表所有行显示红色背景
-- 字体：Times New Roman，12号
-- 行高：最小25，根据说明列内容自动撑开
+- 字体：Times New Roman，12号；行高：最小25，根据说明列内容自动撑开
 
-**知识库更新规则**：
-- 用户修改映射关系时，必须永久保存，下次重新生成时保持一致
-- 比对脚本会自动加载知识库中的映射规则
-- 如果用户修改了映射，重新生成的结果必须与用户修改一致
-
-**重要**：用户修改后的映射关系必须永久保存，下次重新生成时必须保持一致。
+**重要**：用户修改后的映射必须写入知识库永久保存，下次重新生成时保持一致。
 
 ---
 
@@ -305,7 +228,7 @@ python scripts/kb_health_check.py --min-score 2 \
 
 **自验证每轮做两步：**
 
-1. **分层抽样**：读取 `compare_result.json`，按匹配类型（exact_chinese/exact_english/synonym/semantic/keyword/dictionary/control_field/semantic_mapping/standard_reference/modified/new_field/new_tables）分组抽样，确保每种匹配策略有代表性样本。模糊匹配类型多抽，精确匹配少抽。
+1. **分层抽样**：读取 `compare_result.json`，按匹配类型分组抽样，确保每种匹配策略有代表性样本。模糊匹配类型多抽，精确匹配少抽。
 2. **逐条深度核验**：对每个抽样条目溯源到原始文档，收集源标准原文、目标标准原文、结构化解析结果、比对决策记录、知识库等完整上下文，判断匹配是否正确（matched/modified/new_fields/new_tables 四类核验标准）。
 
 **确认模式**（默认）：3轮全部跑完后汇总所有问题输出报告，等用户确认后通过 `/skill-creator` 统一修复，再重跑比对+3轮验证确认修复有效。
@@ -322,29 +245,22 @@ python scripts/kb_health_check.py --min-score 2 \
 
 1. **停止修改**：发现程序问题时，立即停止直接修改代码
 2. **分析问题**：详细分析问题原因和影响范围
-3. **提出方案**：梳理修改方案，包括：
-   - 问题描述
-   - 修改方案（具体改哪些代码、为什么这样改）
-   - 预期效果
-   - 潜在风险（可能影响的其他功能）
+3. **提出方案**：梳理修改方案（问题描述、具体改哪些代码、为什么、预期效果、潜在风险）
 4. **用户确认**：等待用户确认方案可行后，再执行修改
-5. **验证回归**：修改完成后，验证原有功能未被破坏
+5. **验证回归**：修改完成后，按 [references/testing_and_regression.md](references/testing_and_regression.md) 跑三套守卫，验证原有功能未被破坏
 
 **禁止行为：**
 - ❌ 发现问题直接修改程序（可能导致好的功能被改坏）
 - ❌ 未经验证就提交修改
 - ❌ 只修改不说明原因
 
-## 核心功能与安装
-
-> **何时读**：首次部署本 Skill、或排查依赖缺失（python-docx / pandas / openpyxl / marker-pdf 等）时读 [references/install.md](references/install.md).
-
 ## 配置文件
 
-配置文件位于：`<skill_root>/config.yaml`（默认 Skill 安装目录下）
+配置文件位于：`<skill_root>/config.yaml`
 
 可配置项：
-- 工作目录（workspace.root）
+- 输出根目录（workspace.root；**环境变量 `DATA_STD_OUTPUT` 优先于本配置**，换机器无需改文件）
+- 标准版本检测路径（standard_versions；同样支持环境变量 `DATA_STD_V5_PATHS` / `DATA_STD_V6_PATHS` 覆盖）
 - 字段匹配优先级（field_matching.match_priority）
 - 约束保护规则（constraint_protection.rules）
 - 值域匹配策略（value_domain_matching.strategy）
@@ -352,10 +268,16 @@ python scripts/kb_health_check.py --min-score 2 \
 
 ## 常见问题
 
-### Q1: PDF解析表格识别不准确怎么办？
-1. 切换解析器：在 config.yaml 中修改 `parsers.pdf.primary`（可选 marker、pymupdf4llm、pdfplumber）
-2. 确保 PDF 是文字版而非扫描版
-3. 解析后检查生成的 MD 文件，必要时手动修正
+### Q1: PDF 标准怎么解析？
+
+**当前做法（新架构）**：PDF 由**模型直接阅读**，并按
+[doc_parse_spec.md](references/doc_parse_spec.md) 产出规范化 MD；扫描版需先 OCR，
+人工复核后再进入比对。
+
+> **遗留说明（旧路径，已不推荐，保留备查）**：
+> 曾可「切换解析器：在 config.yaml 中修改 `parsers.pdf.primary`（marker / pymupdf4llm / pdfplumber）」。
+> ⚠️ 当前 `config.yaml` 中**已无 `parsers` 配置段**，该配置不再生效。
+> 另：确保 PDF 是文字版而非扫描版；产出 MD 后需人工核对表格是否串行/串列。
 
 ### Q2: 如何添加新的同义词到词库？
 编辑 `knowledge_base/field_synonyms.yaml`，添加映射：
@@ -366,7 +288,17 @@ field_synonyms:
 ```
 
 ### Q3: 跨表关联匹配不到怎么办？
-编辑 `knowledge_base/relations.yaml`，添加表关联关系：
+
+表关联关系按**标准来源分文件**存放，目录是 `knowledge_base/relations/`：
+
+```
+knowledge_base/relations/
+├── generic.yaml              # 通用表关联
+└── source_yunnan_v5.5.yaml   # 按源标准单独维护的关联
+```
+
+在对应文件里添加关联关系：
+
 ```yaml
 relations:
   患者基本信息:
@@ -378,8 +310,6 @@ relations:
 
 ## 错误处理指南
 
-脚本运行时可能遇到以下错误：
-
 **1. 文件不存在**
 ```
 ✗ 错误: 文件不存在 - /path/to/file.docx
@@ -390,7 +320,8 @@ relations:
 ```
 ✗ 原标准转换失败: cannot import name 'Document' from 'docx'
 ```
-解决：安装缺失的依赖 `pip install python-docx pandas openpyxl`
+解决：安装缺失的依赖 `pip install python-docx pandas openpyxl`（完整依赖见
+[references/install.md](references/install.md)，或跑 `scripts/check_environment.py` 自检）。
 
 **3. 解析失败**
 ```
@@ -410,134 +341,51 @@ relations:
 ```
 解决：检查 `reporters/templates/default_template.yaml` 是否存在。
 
+**6. 解析出 0 表 / 0 字段（新路径最常见）**
+```
+✓ 原标准：0 张表，0 个字段
+✗ 问题: 原标准 未解析出任何表
+→ 策略: 继续执行（on_failure=warn）
+```
+原因：规范化 MD 的**列名不在规范列名集合内**（如 `数据元标识`、`标识符`、`填报要求`），
+程序整表丢弃。
+
+解决（按顺序排查）：
+1. 对照 [doc_parse_spec.md §3.3](references/doc_parse_spec.md) 的规范列名集合，把列名归一化
+   （`数据元标识`/`标识符`→`数据元标识符`、`名称`→`数据元名称`、`数据长度`→`表示格式`、
+   `填报要求`→`约束`）；
+2. 约束列取值"是"必须写成 `M`；
+3. 每张表是否有 `#` 标题、表头行后是否紧跟 `| --- |` 分隔行；
+4. 修完**重新解析确认表数/字段数正常**再跑比对——不要带病继续。
+
+> ⚠️ 注意：当前质量验证策略是 `warn`，0 表也会继续跑完并产出"看起来完整"的空报告。
+> 看到「0 张表」请立即中止，不要采信后续报告。
+
 ## 扩展点
 
 如需扩展 Skill 功能：
-- **添加新解析器**：在 `parsers/` 下继承 `BaseParser`，实现 `can_parse()` 和 `parse()` 方法
+- ~~**添加新解析器**：在 `parsers/` 下继承 `BaseParser`，实现 `can_parse()` 和 `parse()` 方法~~
+  → **已废弃**：解析阶段不再有程序。遇到新文档格式请更新
+  [references/doc_parse_spec.md](references/doc_parse_spec.md) 的列名别名表与处理建议，
+  由模型按说明解析；`parsers/` 下的 `converter.py / word_parser.py / excel_parser.py`
+  属遗留兼容路径，不再扩展。
 - **添加新匹配策略**：在 `matchers/` 下添加匹配器，注册到 `standard_comparator.py`
 - **添加新报告格式**：在 `reporters/` 下创建报告生成器，实现 `generate()` 方法
+- **添加新的列名别名**：编辑 `references/doc_parse_spec.md` §3.3（**不要**改
+  `parsers/standard_parser.py` 的列名判定逻辑）
 
-## 代码结构（matchers/）
+## 深入阅读（按需加载）
 
-P1-2 把 5019 行的单文件类拆成"主控 + 若干无状态辅助模块"：
-
-| 模块 | 职责 | 状态依赖 |
-|------|------|---------|
-| `standard_comparator.py` | 主控：匹配调度、通道编排、结果组装 | **有**（配置与运行时状态） |
-| `matching_core.py` | 核心概念判定、显式同义判定、词表（唯一事实来源） | 无 |
-| `field_compatibility.py` | 字段兼容性判定（语义 / 种类 / 角色 / 类型） | 无 |
-| `auto_relation.py` | P6 自动关联（沿 FK 关联图搜子表）判定 + 通道级常量 | 无 |
-| `text_utils.py` | 文本工具（LCS、子序列、角色尾词剥离） | 无 |
-| `global_lookup.py` | 全局查找的基名 / 语义基名归一化 | 无 |
-| `value_domain_comparator.py` | 值域比对 | — |
-| `self_validator.py` | 自验证（漏配 / 疑误配体检） | — |
-
-**约定**：标"无"的模块必须保持无状态——需要配置时**通过参数传入**，
-不要反向 import `standard_comparator`（会形成循环依赖，且判定结果难以复现）。
-主控里保留的是**同名薄委托**，调用这些无状态方法时写法不变。
-
-## 测试与回归防止
-
-### 快速迭代与审计工具链（优化 skill 时用这套）
-
-改完匹配逻辑不要重跑整个解析流程（慢且噪声大），按下面顺序走：
-
-| 脚本 | 作用 | 典型用法 |
+| 文件 | 内容 | 何时读 |
 |---|---|---|
-| `scripts/fast_iterate.py` | **秒级判分**。复用已解析的 `*_standard.json` 重跑比对+自验证，打印匹配类型分布、漏配数、疑误配数、准确率 | `fast_iterate.py <temp_dir> --dump-suspects 40` |
-| `scripts/audit_new_fields.py` | 新增字段深度审计。A档=确定漏配 / B档=疑似 / C档=主子表展开 | `audit_new_fields.py <temp_dir>` |
-| `scripts/audit_matches.py` | 全量匹配**分层置信**审计。L1 中文名同 / L2 基名+种类同 / LE 英文名同源 / LD 字典派生 / L3 需复核 / L4 最可疑 | `audit_matches.py <temp_dir> --sample 12` |
-| `scripts/trace_field.py` | 单字段全链路追踪，定位某个字段为什么没匹配上 | `trace_field.py <temp_dir> <表名> <字段名>` |
-| `scripts/kb_health_check.py` | 知识库脏映射体检（E1a/E1b/E2/E3 加权分层，A=高置信误点 / B=待确认派生） | `kb_health_check.py --min-score 2 --source <temp>/source_standard.json` |
-| `scripts/audit_kb_veto.py` | 审计"知识库映射被否决"后的下游后果，防止网关误杀 | `audit_kb_veto.py <temp_dir>` |
-| `audit_user_custom_review.py`（项目 temp 下，可复用模板） | **新表路径 user_custom 回收硬冲突复核**：遍历 new_tables 中 match_type=='user_custom' 的条目，对每对 (目标,源) 调 `_user_custom_hard_conflict` 输出全部条目+可疑清单到文件 | `python <temp>/audit_user_custom_review.py <temp_dir>`（需按 SKILL_DIR 修改脚本头） |
-| `regenerate_reports.py`（项目 temp 下，可复用模板） | **跳过完整流程重新生成报告**：直接用 `iter_compare_result.json` 重出 HTML/MD/XLSX 三件套（含键名转换 modified→modified_fields），覆盖 reports/ | `python <temp>/regenerate_reports.py`（脚本内改 TEMP/OUT/TITLE） |
-| `scripts/check_undefined_names.py` | **依赖漏带守卫**（P1-2）。AST 静态扫描未定义名字，专治「方法迁到新模块后漏带 import」这类潜伏问题——端到端回归覆盖不到的代码路径靠它兜底 | `python scripts/check_undefined_names.py` |
-| `scripts/regression_check.py` | **端到端回归守卫**（P1-1）。对真实全量数据重跑「比对+自验证+条件装配」，与 golden baseline 逐项对比（含**字段级指纹**），确认行为零变化；有差异退出码 1，可接 CI。详见下方「回归防止机制」 | `regression_check.py --task-dir <任务目录>` |
-
-**迭代纪律**：每次只改一个判据 → 立刻 `fast_iterate.py` → 看漏配/疑误配是否同时不劣化。
-**只看准确率会被自验证的覆盖盲区骗到**：自验证只覆盖它认识的匹配类型，
-新增匹配类型（如 `cross_table_fuzzy`）必须同步加进 `self_validator.py` 的 `fuzzy_types`，
-否则准确率虚高。分层审计（`audit_matches.py`）是自验证的交叉校验，两者都要看。
-
-### 测试用例库
-
-测试用例位于：`tests/test_cases.yaml`
-
-每个测试用例包含：
-- **正确匹配案例**：应该被匹配的字段对
-- **错误匹配案例**：不应该被匹配的字段对
-- **边界案例**：需要特别注意的特殊情况
-
-### 运行测试
-
-**运行所有测试：**
-```bash
-python3 <skill_root>/scripts/test_runner.py
-```
-
-**保存测试基线：**
-```bash
-python3 <skill_root>/scripts/test_runner.py --save-baseline
-```
-
-**检查回归：**
-```bash
-python3 <skill_root>/scripts/test_runner.py --check-regression
-```
-
-### 修改规则的标准流程
-
-**当发现新的匹配问题时，遵循以下流程：**
-
-1. **添加测试用例**
-   - 在 `knowledge_base/test_cases.yaml` 中添加新的测试用例
-   - 描述问题场景和预期结果
-   - 运行测试确认新用例失败（证明问题存在）
-
-2. **修改规则**
-   - 在 `matchers/standard_comparator.py` 中修改匹配逻辑
-   - 优先修改通用规则，避免添加过于特殊的规则
-
-3. **运行测试验证**
-   - 运行所有测试：`python3 scripts/test_runner.py`
-   - 确认新测试用例通过
-   - 确认所有旧测试用例仍然通过（无回归）
-
-4. **更新基线**
-   - 如果所有测试通过，更新基线：`python3 scripts/test_runner.py --save-baseline`
-
-### 回归防止机制
-
-本 Skill 有**两套互补**的回归守卫，改动匹配逻辑时**两个都要跑**：
-
-| 守卫 | 覆盖面 | 速度 | 命令 |
-|------|--------|------|------|
-| **单元级** `test_runner.py` | `tests/test_cases.yaml` 的 27 条手工用例，覆盖规则点 | 秒级 | `python scripts/test_runner.py --check-regression` |
-| **端到端** `regression_check.py` | 真实全量数据（V6.0 任务 5349 个字段判定），覆盖整体行为 | 约 1-2 分钟 | `python scripts/regression_check.py --task-dir <任务目录>` |
-| **静态** `check_undefined_names.py` | 全部模块的未定义名字（漏带 import） | 秒级 | `python scripts/check_undefined_names.py` |
-
-**为什么必须有端到端基线**：单元测试只有 27 条用例，真实任务却有 5000+ 字段判定。
-拆分 `standard_comparator.py`、重构 matcher 这类大改动，**单元测试全绿不等于行为没变**——
-只有字段级指纹比对能证明"行为零变化"。
-
-**为什么还要静态检查**：端到端基线只保证**被数据触发到的路径**行为不变，保证不了代码
-100% 覆盖。P1-2 拆分时就出现过：方法迁到新模块后漏带 `import re`，但该分支在 V6.0 数据集
-上从未被触发，端到端回归照样全绿，直到后续调用才 NameError。**三套守卫必须都跑**。
-
-**端到端基线的关键能力**：不只比总数，还比对**每个字段的判定**（匹配类型 + 源字段 + 条件显示），
-因此能捕获「matched 总数不变，但某字段从 `synonym` 漂移成 `keyword`」这类静默变化——
-纯计数检测不出来。
-
-**维护方式**：
-- 基线文件：`tests/golden/<任务名>.json`（当前仅 V6.0医疗服务_vs_省平台v1.4.1医疗部分）
-- 人工确认本次结果正确后更新基线：`regression_check.py --task-dir <任务目录> --update-baseline`
-- 回归检查是**只读**的：结果只在内存判分，不覆盖 temp 下任何产物
-- 退出码：`0`=无回归 / `1`=检出回归 / `2`=参数或文件错误
-
-**其余机制**：
-- **测试覆盖**：每次修复都添加对应测试用例，确保问题不会再次出现
-- **持续积累**：测试用例库随使用不断完善，Skill 越来越智能
+| [references/doc_parse_spec.md](references/doc_parse_spec.md) | 解析输出契约：MD 语法、列名集合、9 项自检 | 每次解析原始标准前 |
+| [references/kb_health.md](references/kb_health.md) | 知识库结论复用边界、体检工具（E1a/E1b/E2/E3） | 换标准对、修脏映射时 |
+| [references/testing_and_regression.md](references/testing_and_regression.md) | 调优工具链、三套回归守卫、修改规则标准流程 | 改匹配逻辑前后 |
+| [references/code_structure.md](references/code_structure.md) | matchers/ 模块表与无状态约定 | 重构 matchers 前 |
+| [references/self_validation_detail.md](references/self_validation_detail.md) | 自验证抽样表、核验标准、报告格式 | 跑自验证前 |
+| [references/install.md](references/install.md) | 依赖安装与说明 | 首次部署、排查依赖 |
+| [references/setup-guide.md](references/setup-guide.md) | 环境配置逐步指南 | check_environment 报 needs_setup 时 |
+| [references/history.md](references/history.md) | 历史修复记录 | 追溯判据来龙去脉 |
 
 ## 相关Skill
 

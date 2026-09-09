@@ -216,10 +216,10 @@ class DataModelCompareV2:
 
     def __init__(self, config_path: str = None):
         self.config = self._load_config(config_path)
-        # 输出根目录优先级：config.yaml(workspace.root) > 环境变量 DATA_STD_OUTPUT > 默认 ~/data-model-compare-docs
+        # 输出根目录优先级：环境变量 DATA_STD_OUTPUT > config.yaml(workspace.root) > 默认 ~/data-model-compare-docs
         default_workspace = os.environ.get('DATA_STD_OUTPUT') or os.path.join(
             os.path.expanduser('~'), 'data-model-compare-docs')
-        self.workspace = self.config.get('workspace', {}).get('root', default_workspace)
+        self.workspace = os.environ.get('DATA_STD_OUTPUT') or self.config.get('workspace', {}).get('root', default_workspace)
 
         # 初始化组件（按config.yaml中的实际key读取）
         self.converter = DocumentConverter(self.config.get('parsers', {}))
@@ -873,14 +873,16 @@ def main():
     parser.add_argument('--output', '-o', help='输出目录')
     parser.add_argument('--title', default='数据模型比对报告', help='报告标题')
     parser.add_argument('--config', '-c', help='配置文件路径')
-    parser.add_argument('--feedback', '-f', help='用户编辑后的 Excel 文件路径（用于回写知识库）')
+    parser.add_argument('--feedback', '-f', help='用户编辑后的 Excel 文件路径（只读分析，输出知识库写入指令，不自动回写）')
 
     args = parser.parse_args()
 
-    # 如果提供了 feedback 参数，先处理 Excel 回写
+    # 如果提供了 feedback 参数：只读分析 Excel 变更，输出知识库写入指令。
+    # 回写由模型按指令执行（SKILL.md 模式四），程序不做自动回写——
+    # 自动回写无法甄别"清空=不应匹配"的否定结论，曾与人工判断冲突。
     if args.feedback:
         print("=" * 80)
-        print("检测到 --feedback 参数，开始处理 Excel 回写...")
+        print("Excel 变更分析（只读模式，不改知识库）")
         print("=" * 80)
 
         # 推断任务目录（与 DataModelCompareV2 的 workspace 推导保持一致）
@@ -912,30 +914,22 @@ def main():
             print("\n请确保已经运行过比对，并且 Excel 文件路径正确。")
             sys.exit(1)
 
-        # 调用 read_excel_feedback.py
-        from scripts.read_excel_feedback import process_feedback
+        # 调用 read_modified_excel.py：读出变更清单并打印知识库写入指令
+        from scripts.read_modified_excel import print_instructions, read_modified_excel
         try:
-            changes = process_feedback(
+            changes = read_modified_excel(
                 excel_path=args.feedback,
                 compare_result_path=compare_result_path,
-                target_standard_path=target_standard_path,
-                source_standard_path=source_standard_path,
-                task_dir=task_dir,
-                skill_dir=SKILL_DIR,
+                knowledge_base_path=os.path.join(SKILL_DIR, 'knowledge_base'),
             )
-
-            if changes:
-                print(f"\n✓ Excel 回写完成，检测到 {len(changes)} 处变更")
-                print("  知识库已更新，重新运行比对以应用用户映射...\n")
-            else:
-                print("\n✓ Excel 回写完成，未检测到变更")
-                print("  继续运行比对...\n")
+            print_instructions(changes)
+            print("\n↑ 以上为知识库写入指令，由模型按 SKILL.md 模式四执行回写。")
         except Exception as e:
-            print(f"\n✗ Excel 回写失败: {e}")
-            print("  将继续运行比对，但用户映射可能不会生效...")
+            print(f"\n✗ Excel 变更分析失败: {e}")
             import traceback
             traceback.print_exc()
-            print()
+        # 只读分析后即退出：是否回写、回写内容由模型与用户决定，不自动继续比对
+        sys.exit(0)
 
     # 创建比对实例
     comparer = DataModelCompareV2(args.config)

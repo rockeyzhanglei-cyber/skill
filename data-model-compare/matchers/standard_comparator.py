@@ -93,95 +93,8 @@ def _ngram_similarity(s1: str, s2: str, n: int = 2) -> float:
     return len(intersection) / len(union) if union else 0.0
 
 
-def _load_relations(skill_dir: str) -> Dict:
-    """从 relations/ 目录加载表关联关系
-
-    返回格式:
-    {
-        'joins': [                          # SQL精度关联列表
-            {'from': 'TABLE_A', 'to': 'TABLE_B',
-             'conditions': [{'left': 'TABLE_A.field', 'right': 'TABLE_B.field'}, ...],
-             'type': '1:N', 'note': '...'},
-            ...
-        ],
-        'table_roles': {'角色名': '实际表名', ...},
-        'key_mappings': {'业务概念': {'en': 'FIELD', 'cn': '中文名', ...}, ...},
-        'adjacency': {'TABLE_A': [{'to': 'TABLE_B', 'conditions': [...], 'type': '1:N'}, ...], ...}
-    }
-    """
-    relations_dir = os.path.join(skill_dir, 'knowledge_base', 'relations')
-    if not os.path.isdir(relations_dir):
-        return {'joins': [], 'table_roles': {}, 'key_mappings': {}, 'adjacency': {}}
-
-    result = {'joins': [], 'table_roles': {}, 'key_mappings': {}, 'adjacency': {}}
-
-    for filename in sorted(os.listdir(relations_dir)):
-        if not filename.endswith('.yaml'):
-            continue
-        filepath = os.path.join(relations_dir, filename)
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f)
-            if not data:
-                continue
-
-            # 加载 table_roles
-            roles = data.get('table_roles', {})
-            if roles:
-                result['table_roles'].update(roles)
-
-            # 加载 key_mappings
-            keys = data.get('key_mappings', {})
-            if keys:
-                result['key_mappings'].update(keys)
-
-            # 加载 joins 列表
-            joins = data.get('joins', [])
-            for j in joins:
-                if not isinstance(j, dict) or not j.get('join'):
-                    continue
-                # 解析 join 条件
-                conditions = []
-                for cond_str in j['join']:
-                    clean = cond_str.split('#')[0].strip()
-                    if '=' not in clean:
-                        continue
-                    parts = clean.split('=')
-                    if len(parts) == 2:
-                        left = parts[0].strip()
-                        right = parts[1].strip()
-                        if '.' in left and '.' in right:
-                            conditions.append({'left': left, 'right': right})
-
-                if conditions:
-                    join_entry = {
-                        'from': j['from'],
-                        'to': j['to'],
-                        'conditions': conditions,
-                        'type': j.get('type', ''),
-                        'note': j.get('note', '')
-                    }
-                    result['joins'].append(join_entry)
-
-                    # 构建邻接表（双向）
-                    frm = j['from']
-                    to = j['to']
-                    if frm not in result['adjacency']:
-                        result['adjacency'][frm] = []
-                    if to not in result['adjacency']:
-                        result['adjacency'][to] = []
-                    result['adjacency'][frm].append({
-                        'to': to, 'conditions': conditions, 'type': j.get('type', '')
-                    })
-                    result['adjacency'][to].append({
-                        'to': frm, 'conditions': conditions, 'type': j.get('type', '')
-                    })
-
-        except Exception:
-            pass
-
-    return result
-
+# 注：模块级 _load_relations() 已删除——relations 统一由 knowledge_base/manager.py
+# 装载（_load_relations 方法），comparator 通过 self.kb.relations 只读访问。
 
 def _find_cross_table_paths(
     start_tables: List[str],
@@ -497,6 +410,9 @@ class StandardComparator:
         self.field_mappings = self.kb.field_mappings
         self.numbered_field_groups = self.kb.numbered_field_groups
         self.relations = self.kb.relations
+        # 已学习的表映射（历史任务沉淀，供 _find_matching_table 最高优先级使用）
+        # 统一经 manager 装载（含 target_alt 展开为 <source>_alt 键）
+        self.learned_mappings = self.kb.learned_mappings
         # 跨表全局复用索引（key=字段语义，value=源字段信息，不绑定源表）
         self.user_custom_field_mappings_global = self.kb._cache.get(
             'user_custom_field_mappings_global', {}) or {}
@@ -602,60 +518,15 @@ class StandardComparator:
         # 保存exclude列表供后续使用
         self.synonym_exclude_list = list(set(exclude_list))
 
-        # 加载已学习的表映射（供跨表匹配使用）
-        self.learned_mappings = {}
-        learned_path = os.path.join(skill_dir, 'knowledge_base', 'learned_mappings.yaml')
-        if os.path.exists(learned_path):
-            with open(learned_path, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f)
-                mappings = data.get('table_mappings', {})
-                if isinstance(mappings, dict):
-                    for source_name, info in mappings.items():
-                        if isinstance(info, dict) and info.get('target'):
-                            self.learned_mappings[source_name] = info['target']
-                            if info.get('target_alt'):
-                                self.learned_mappings[source_name + '_alt'] = info['target_alt']
+        # 兼容属性（manager 未注入 learned_mappings 时的兜底，正常路径见 __init__）
+        if not hasattr(self, 'learned_mappings'):
+            self.learned_mappings = {}
 
         return synonyms
 
-    def _load_table_synonyms(self) -> Dict[str, List[str]]:
-        """加载表名同义词映射"""
-        import yaml
-        skill_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        table_synonyms_path = os.path.join(skill_dir, 'knowledge_base', 'table_synonyms.yaml')
-        if os.path.exists(table_synonyms_path):
-            with open(table_synonyms_path, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f)
-                return data.get('table_synonyms', {}) if data else {}
-        return {}
-
-    def _load_field_mappings(self) -> Dict[str, Dict]:
-        """加载字段映射配置"""
-        import yaml
-        skill_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        field_mappings_path = os.path.join(skill_dir, 'knowledge_base', 'field_mappings.yaml')
-        if os.path.exists(field_mappings_path):
-            with open(field_mappings_path, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f)
-                mappings = data.get('field_mappings', []) if data else []
-                # 转换为目标字段名 -> 映射规则的索引
-                result = {}
-                for mapping in mappings:
-                    target_fields = mapping.get('target_fields', [])
-                    for target_field in target_fields:
-                        result[target_field] = mapping
-                return result
-        return {}
-
-    def _load_numbered_field_groups(self) -> Dict:
-        """加载序号字段组配置（主子表展开策略）"""
-        skill_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        config_path = os.path.join(skill_dir, 'knowledge_base', 'numbered_field_groups.yaml')
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f)
-                return data if data else {}
-        return {}
+    # 注：_load_table_synonyms / _load_field_mappings / _load_numbered_field_groups
+    # 已删除——这三个知识库统一由 knowledge_base/manager.py 装载，
+    # comparator 通过 self.kb.* 只读访问（见 __init__），不再各自读文件。
 
     # ======================================================================
     # 序号字段组（主子表展开）— 通用自动检测
@@ -1008,24 +879,8 @@ class StandardComparator:
         return result
 
     def _load_table_mappings(self) -> Dict[str, Dict]:
-        """从 table_synonyms.yaml 加载多对一表映射配置"""
-        import yaml
-        skill_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        table_synonyms_path = os.path.join(skill_dir, 'knowledge_base', 'table_synonyms.yaml')
-        if os.path.exists(table_synonyms_path):
-            with open(table_synonyms_path, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f)
-                multi = data.get('multi_source_tables', {})
-                if multi:
-                    # 展开 aliases 为独立的 key，都指向同一个映射配置
-                    result = {}
-                    for table_name, info in multi.items():
-                        if isinstance(info, dict):
-                            result[table_name] = info
-                            for alias in info.get('aliases', []):
-                                result[alias] = info
-                    return result
-        return {}
+        """多对一表映射配置——统一经 manager 装载（不再直读 yaml 文件）"""
+        return self.kb.multi_source_tables if hasattr(self, 'kb') else {}
 
     def _find_table_mapping(self, target_table) -> Optional[Dict]:
         """查找目标表的表映射配置，支持多种key格式"""
@@ -1465,9 +1320,7 @@ class StandardComparator:
             if target_chinese2 and source_chinese2 and target_chinese2 in source_chinese2:
                 return source_table
 
-        # 5. 语义匹配（基于表名相似度）
-        # TODO: 可以实现更复杂的语义匹配
-
+        # 5. 语义匹配（基于表名相似度）由上层通道处理
         return None
 
     def _extract_chinese_name(self, name: str) -> str:

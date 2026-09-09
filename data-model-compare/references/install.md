@@ -1,16 +1,31 @@
-## 核心功能概述
+# 依赖安装
 
-- **多格式文档解析**：Word/Excel/PDF/Markdown，自动选择最佳解析器
-- **智能字段匹配**：中文名精确匹配 → 英文名精确匹配 → 同义词匹配 → 语义匹配 → 关键词匹配
-- **值域比对**：保守策略（高阈值0.95），宁可漏映射也不错映射
-- **约束与长度保护**：自动检测约束升级和长度不足问题
-- **知识库**：内置医疗行业同义词库，支持自学习
-- **报告生成**：MD + HTML 双格式，带颜色标注和覆盖率统计
+> 本文件说明本 Skill 的 Python 依赖。**解析阶段由模型按
+> [doc_parse_spec.md](doc_parse_spec.md) 产出规范化 MD，不依赖任何文档解析程序**；
+> 下列依赖仅供比对主流程与遗留兼容路径使用。
 
 ## 安装依赖
 
 ```bash
-# 基础依赖
-pip install pyyaml pandas openpyxl python-docx
+# 主流程必需（配置装载 / Excel 生成 / 值域比对）
+pip install pyyaml pandas openpyxl
 
-# PDF解析（可选）
+# 遗留兼容路径（直接喂 docx/xlsx/pdf 原始文档时才需要，主路径不需要）
+pip install python-docx pdfplumber
+
+# 性能监控（utils/performance_monitor.py 使用）
+pip install psutil
+```
+
+一键安装：
+
+```bash
+pip install pyyaml pandas openpyxl python-docx pdfplumber psutil
+```
+
+## 说明
+
+- **主路径（规范化 MD）**：只需 `pyyaml`（config/知识库装载）、`pandas` + `openpyxl`（生成可编辑 Excel）、无文档解析依赖。
+- **遗留兼容路径**：`parsers/converter.py` 直接转换 docx/xlsx/pdf 时才需要 `python-docx`（Word）、`pdfplumber`（PDF）。
+- **PDF 已无专用解析器**：旧文档提到的 marker-pdf / pymupdf4llm 均未在代码中使用；PDF 建议由模型按解析说明直接阅读产出规范化 MD（见 SKILL.md FAQ Q1）。
+- `.doc` 不可用：macOS 下转换必丢表格，须先另存为 `.docx`。

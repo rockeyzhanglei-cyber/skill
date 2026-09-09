@@ -1,7 +1,7 @@
 {
   "meta": {
     "task": "V6.0医疗服务_vs_省平台v1.4.1医疗部分",
-    "temp_dir": "/Users/zhanglei/data-model-compare-docs/V6.0医疗服务_vs_省平台v1.4.1医疗部分/temp",
+    "temp_dir": "<DATA_STD_OUTPUT>/V6.0医疗服务_vs_省平台v1.4.1医疗部分/temp",
     "created_at": "2026-08-28T18:46:02+08:00",
     "generator": "scripts/regression_check.py"
   },

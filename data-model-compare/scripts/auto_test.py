@@ -31,11 +31,15 @@ from matchers.standard_comparator import StandardComparator, CompareResult
 class AutoTester:
     """自动测试器"""
 
-    def __init__(self, source_files: List[str], target_files: List[str], title: str = "自动测试报告"):
+    def __init__(self, source_files: List[str], target_files: List[str], title: str = "自动测试报告",
+                 force_clean: bool = False):
         self.source_files = source_files
         self.target_files = target_files
         self.title = title
-        self.workspace = "/Users/zhanglei/data-model-compare-docs"
+        self.force_clean = force_clean
+        # 输出根目录：环境变量优先，与 main.py 的解析逻辑保持一致
+        self.workspace = os.environ.get('DATA_STD_OUTPUT') or os.path.join(
+            os.path.expanduser('~'), 'data-model-compare-docs')
         self.task_dir = os.path.join(self.workspace, title)
         self.temp_dir = os.path.join(self.task_dir, "temp")
         self.reports_dir = os.path.join(self.task_dir, "reports")
@@ -53,9 +57,19 @@ class AutoTester:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 运行比对流程")
         print("=" * 80)
 
-        # 清理旧的报告
+        # 清理旧的报告（删除整个任务目录是破坏性操作：
+        # 仅在 --force-clean 或交互确认后执行，防止标题撞车误删真实任务产物）
         if os.path.exists(self.task_dir):
             import shutil
+            if not self.force_clean:
+                if sys.stdin is None or not sys.stdin.isatty():
+                    print(f"[跳过清理] 任务目录已存在（避免误删）: {self.task_dir}")
+                    print("           确认要覆盖请加 --force-clean 或设置 AutoTester(force_clean=True)")
+                    sys.exit(2)
+                answer = input(f"将删除并重建任务目录 {self.task_dir}，确认？[y/N] ").strip().lower()
+                if answer != 'y':
+                    print("[中止] 未删除任何文件")
+                    sys.exit(2)
             shutil.rmtree(self.task_dir)
 
         # 运行main.py
@@ -293,20 +307,27 @@ class AutoTester:
 
 def main():
     """主函数"""
-    # 默认测试文件
-    source_files = [
-        "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/02 V5.5/01 产品文档/04 标准规范（项目化）/036 云南区域标准规范/区域卫生信息平台数据传输规范260709/区域卫生信息平台数据传输规范 第01部分：医疗服务.docx",
-        "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/02 V5.5/01 产品文档/04 标准规范（项目化）/036 云南区域标准规范/区域卫生信息平台数据传输规范260709/区域卫生信息平台数据传输规范 第02部分：人财物运营管理.docx",
-        "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/02 V5.5/01 产品文档/04 标准规范（项目化）/036 云南区域标准规范/区域卫生信息平台数据传输规范260709/区域卫生信息平台数据传输规范 值域字典.xlsx"
-    ]
+    import argparse
+    ap = argparse.ArgumentParser(description='自动测试循环（默认测试文件可用命令行参数覆盖）')
+    ap.add_argument('--source', nargs='+', help='原标准文件路径（多个用空格分隔）')
+    ap.add_argument('--target', nargs='+', help='目标标准文件路径（多个用空格分隔）')
+    ap.add_argument('--title', default='自动测试报告', help='任务标题')
+    ap.add_argument('--force-clean', action='store_true',
+                    help='已存在同名任务目录时直接删除重建（默认会交互确认或中止）')
+    args = ap.parse_args()
 
-    target_files = [
-        "/Users/zhanglei/auto-dev-docs/RDA-01-标准规范/229712/附件/采集标准规范/全民健康信息平台数据接口标准规范（医疗部分）v1.4.1.docx",
-        "/Users/zhanglei/auto-dev-docs/RDA-01-标准规范/229712/附件/采集标准规范/全民健康信息平台数据接口标准规范（值域字典）v1.4.1.docx"
-    ]
+    # 默认测试文件（本机路径，仅当未通过命令行提供时提示用户指定）
+    source_files = args.source
+    target_files = args.target
+
+    if not source_files or not target_files:
+        print("[参数缺失] 请指定 --source 与 --target（本脚本不再内置个人机器路径）")
+        print("示例: python auto_test.py --source a.docx b.xlsx --target c.docx --title 测试")
+        sys.exit(2)
 
     # 创建测试器
-    tester = AutoTester(source_files, target_files, title="自动测试报告")
+    tester = AutoTester(source_files, target_files, title=args.title,
+                        force_clean=args.force_clean)
 
     # 运行测试循环
     success = tester.run_auto_test_loop()

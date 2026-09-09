@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
-"""诊断特定字段为什么没匹配上（调试用）"""
+"""诊断特定字段为什么没匹配上（调试用）
+
+用法: python diag_missing_fields.py <temp_dir> [表名] [字段名]
+temp_dir 默认取环境变量 DATA_STD_OUTPUT 下最近修改的任务目录。
+"""
 import sys, os, json
 
-SKILL_DIR = '/Users/zhanglei/.cache/WinCode/skill/data-model-compare'
+SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SKILL_DIR)
 
 from parsers.standard_parser import StandardDocument, StandardTable, StandardField, ValueDomain
@@ -39,7 +43,26 @@ def load_doc(path):
         ))
     return StandardDocument(source_file=data.get('source_file',''), tables=tables, metadata=data.get('metadata',{}))
 
-TEMP = '/Users/zhanglei/data-model-compare-docs/新疆自治区标准_vs_乌鲁木齐标准/temp'
+def _resolve_temp():
+    """解析任务 temp 目录：优先命令行第 1 参数；否则取 DATA_STD_OUTPUT 下最近修改的任务目录"""
+    if len(sys.argv) > 1 and sys.argv[1]:
+        return sys.argv[1]
+    workspace = os.environ.get('DATA_STD_OUTPUT') or os.path.join(
+        os.path.expanduser('~'), 'data-model-compare-docs')
+    if not os.path.isdir(workspace):
+        sys.exit('[ERR] 未找到工作目录，请传入 temp 目录路径或设置 DATA_STD_OUTPUT')
+    tasks = sorted(
+        (d for d in os.listdir(workspace) if os.path.isdir(os.path.join(workspace, d, 'temp'))),
+        key=lambda d: os.path.getmtime(os.path.join(workspace, d, 'temp')),
+        reverse=True,
+    )
+    if not tasks:
+        sys.exit('[ERR] 工作目录下没有含 temp 的任务目录，请传入 temp 目录路径')
+    return os.path.join(workspace, tasks[0], 'temp')
+
+
+TEMP = _resolve_temp()
+print(f"[diag] 使用任务目录: {TEMP}")
 src_doc = load_doc(os.path.join(TEMP, 'source_standard.json'))
 tgt_doc = load_doc(os.path.join(TEMP, 'target_standard.json'))
 

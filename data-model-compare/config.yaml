@@ -1,35 +1,36 @@
 # 数据模型比对 Skill 配置文件（通用配置）
 # 注意：本文件只包含跨任务通用的配置
 # 任务特定内容（如具体的标准路径、映射经验）通过知识库积累
+#
+# 路径解析优先级（换机器无需改本文件）：
+#   workspace.root   ← 环境变量 DATA_STD_OUTPUT 优先
+#   standard_versions ← 环境变量 DATA_STD_V5_PATHS / DATA_STD_V6_PATHS 优先
+#   （环境变量值为冒号分隔的多个路径，如 ~/tfs/v5/:~/tfs/v5-proj/；未设置时才读本文件）
 
 # =============================================================================
-# 工作目录配置
+# 工作目录配置（默认值；DATA_STD_OUTPUT 可覆盖）
 # =============================================================================
 workspace:
-  root: "/Users/zhanglei/data-model-compare-docs"
+  root: "~/data-model-compare-docs"
 
 # =============================================================================
-# 标准版本检测配置
+# 标准版本检测配置（默认值；DATA_STD_V5_PATHS / DATA_STD_V6_PATHS 可覆盖）
 # 根据原标准文件路径判断是5.X还是6.0版本
 # =============================================================================
 standard_versions:
   # 5.X版本标准路径配置
   v5:
     # 公版标准路径
-    public_paths:
-      - "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/02 V5.5/01 产品文档/02 标准规范/库表接入规范/"
+    public_paths: []
     # 项目化标准路径
-    project_paths:
-      - "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/02 V5.5/01 产品文档/04 标准规范（项目化）/"
+    project_paths: []
 
   # 6.0版本标准路径配置
   v6:
     # 公版标准路径
-    public_paths:
-      - "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/03 V6.0/01 产品文档/01 标准规范/"
+    public_paths: []
     # 项目化标准路径
-    project_paths:
-      - "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/03 V6.0/01 产品文档/02 标准规范（项目化）/"
+    project_paths: []
 
   # 字段命名规范
   # 5.X版本使用拼音首字母缩写

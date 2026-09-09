@@ -16,6 +16,18 @@ SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SKILL_DIR)
 
 
+# 端到端测试文档路径：从环境变量 DATA_STD_E2E_TEST_DOCS 读取（冒号分隔：前半为源文件，后半为目标文件），
+# 未设置时跳过真实文档用例（本 skill 包内不再内置个人机器路径）。
+def _e2e_docs():
+    raw = os.environ.get('DATA_STD_E2E_TEST_DOCS', '')
+    if not raw:
+        return [], []
+    parts = [p for p in raw.split(':') if p.strip()]
+    # 约定：前 N/2 个为源文件，后 N/2 为目标文件
+    n = len(parts)
+    return parts[:n // 2], parts[n // 2:]
+
+
 class EndToEndTester:
     """端到端测试器"""
 
@@ -31,13 +43,12 @@ class EndToEndTester:
         """使用真实文档测试完整工作流"""
         test_name = "完整工作流（真实文档）"
 
-        # 测试文档路径
-        source_files = [
-            "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/02 V5.5/01 产品文档/04 标准规范（项目化）/036 云南区域标准规范/区域卫生信息平台数据传输规范260709/区域卫生信息平台数据传输规范 第01部分：医疗服务.docx"
-        ]
-        target_files = [
-            "/Users/zhanglei/auto-dev-docs/RDA-01-标准规范/229712/附件/采集标准规范/全民健康信息平台数据接口标准规范（医疗部分）v1.4.1.docx"
-        ]
+        # 测试文档路径（来自环境变量 DATA_STD_E2E_TEST_DOCS）
+        source_files, target_files = _e2e_docs()
+        if not source_files:
+            self.results['details'].append(f"SKIP: {test_name}（未设置 DATA_STD_E2E_TEST_DOCS，跳过真实文档用例）")
+            print(f"- SKIP: {test_name}（未设置 DATA_STD_E2E_TEST_DOCS）")
+            return
 
         # 检查文件是否存在
         for f in source_files + target_files:
@@ -132,15 +143,12 @@ class EndToEndTester:
         """测试性能（大文档比对）"""
         test_name = "性能测试（多文件比对）"
 
-        # 使用多个文件测试性能
-        source_files = [
-            "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/02 V5.5/01 产品文档/04 标准规范（项目化）/036 云南区域标准规范/区域卫生信息平台数据传输规范260709/区域卫生信息平台数据传输规范 第01部分：医疗服务.docx",
-            "/Users/zhanglei/winning/tfs2018/RDA-01-标准规范/02 V5.5/01 产品文档/04 标准规范（项目化）/036 云南区域标准规范/区域卫生信息平台数据传输规范260709/区域卫生信息平台数据传输规范 第02部分：人财物运营管理.docx"
-        ]
-        target_files = [
-            "/Users/zhanglei/auto-dev-docs/RDA-01-标准规范/229712/附件/采集标准规范/全民健康信息平台数据接口标准规范（医疗部分）v1.4.1.docx",
-            "/Users/zhanglei/auto-dev-docs/RDA-01-标准规范/229712/附件/采集标准规范/全民健康信息平台数据接口标准规范（值域字典）v1.4.1.docx"
-        ]
+        # 使用多个文件测试性能（来自环境变量 DATA_STD_E2E_TEST_DOCS）
+        source_files, target_files = _e2e_docs()
+        if not source_files:
+            self.results['details'].append(f"SKIP: {test_name}（未设置 DATA_STD_E2E_TEST_DOCS，跳过性能用例）")
+            print(f"- SKIP: {test_name}（未设置 DATA_STD_E2E_TEST_DOCS）")
+            return
 
         # 检查文件是否存在
         for f in source_files + target_files:
