@@ -20,6 +20,9 @@
 | N | 数值型 | NUMBER | NUMERIC |
 | D | 日期型 | DATE | DATETIME |
 | DT | 日期时间型 | DATE | DATETIME |
+| BY | 二进制型（二进制数据，如照片/文件；同目录技术规范定义） | BLOB | VARBINARY(MAX) |
+
+> **BY 类型说明**：`BY` 是区域卫生信息传输规范中定义的**二进制数据类型**（用于存储照片、文件等二进制内容，如体检总检表 `TJZJB.ZP 照片`）。比对时映射到 Oracle `BLOB` / SQL Server `VARBINARY(MAX)`，与 `BLOB`/`VARBINARY`/`BINARY`/`RAW`/`IMAGE` 等二进制库类型视为同族匹配。
 
 ### 表示格式解析（长度/精度）
 

@@ -309,6 +309,50 @@ begin
 end $$;
 ```
 
+### 修改字段类型（含二级索引时必须先摘索引）
+
+**坑（2026-09-14 需求 248910 实测）**：Greenplum 对建了索引的列执行 `alter column ... type` 会报
+`ERROR: cannot alter indexed column（建议：DROP the index first, and recreate it after the ALTER）`——
+GP 不会像原生 PG 那样自动重建依赖索引。且这类索引往往是 Flyway 管理之外手工建的，仓库脚本里搜不到。
+
+**生成规则**：凡是 `alter column X type ...` 的 do $$ 块，一律用下方「动态摘索引→改类型→按原定义重建」模板，
+幂等（无索引时循环体不执行，行为与普通块一致）：
+
+```sql
+do $$
+declare
+    r record;
+    def text;
+    defs text[];
+begin
+    if exists (select 1 from information_schema.tables where table_name = '表名') then
+        if exists (select 1 from information_schema.columns where table_name = '表名' and column_name = '字段名' and <类型条件>) then
+            defs := '{}';
+            for r in
+                select c2.relname as idxname, pg_get_indexdef(i.indexrelid) as idxdef
+                from pg_index i
+                join pg_class c2 on c2.oid = i.indexrelid
+                join pg_attribute a on a.attrelid = i.indrelid and a.attname = '字段名'
+                where i.indrelid in (select oid from pg_class where relname = '表名' and relkind = 'r')
+                  and not i.indisprimary
+                  and a.attnum = any(string_to_array(i.indkey::text, ' ')::int2[])
+            loop
+                defs := defs || r.idxdef;
+                execute 'drop index if exists ' || quote_ident(r.idxname);
+            end loop;
+            alter table 表名 alter column 字段名 type <新类型>;
+            foreach def in array defs loop
+                execute def;
+            end loop;
+        end if;
+    end if;
+end $$;
+```
+
+- `not i.indisprimary`：主键索引跳过（GP 主键列一般不做改类型；若真要改需先重建约束，另行评估）。
+- 重建用 `pg_get_indexdef` 原文，保留原索引的表名/方法/谓词，不手工拼写。
+- `drop not null`（改必填性）不涉及索引依赖，仍用简单 do $$ 块即可。
+
 ### 新增表
 
 ```sql

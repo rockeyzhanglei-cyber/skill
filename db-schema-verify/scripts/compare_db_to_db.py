@@ -217,17 +217,17 @@ def compare_tables(base_columns, target_columns, table_name, target_db_type):
 # ============================================================
 
 def generate_add_column_sql(table_name, col_name, col_def, db_type):
-    """生成ADD COLUMN语句"""
+    """生成ADD COLUMN语句（SQL Server 每条语句后加 GO 分批，便于逐条执行）"""
     if db_type == 'oracle':
         type_str = convert_type_to_oracle(col_def)
         return f'ALTER TABLE "{table_name}" ADD ("{col_name}" {type_str});'
     else:
         type_str = convert_type_to_sqlserver(col_def)
-        return f"ALTER TABLE [{table_name}] ADD [{col_name}] {type_str} NULL;"
+        return f"ALTER TABLE [{table_name}] ADD [{col_name}] {type_str} NULL;\nGO"
 
 
 def generate_modify_sql(table_name, col_name, base_def, db_type):
-    """生成MODIFY语句"""
+    """生成MODIFY语句（SQL Server 每条语句后加 GO 分批，便于逐条执行）"""
     if db_type == 'oracle':
         type_str = convert_type_to_oracle(base_def)
         nullable_str = 'NULL' if base_def['nullable'] else 'NOT NULL'
@@ -235,7 +235,7 @@ def generate_modify_sql(table_name, col_name, base_def, db_type):
     else:
         type_str = convert_type_to_sqlserver(base_def)
         nullable_str = 'NULL' if base_def['nullable'] else 'NOT NULL'
-        return f"ALTER TABLE [{table_name}] ALTER COLUMN [{col_name}] {type_str} {nullable_str};"
+        return f"ALTER TABLE [{table_name}] ALTER COLUMN [{col_name}] {type_str} {nullable_str};\nGO"
 
 
 def convert_type_to_oracle(col_def):
@@ -345,7 +345,11 @@ def main():
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(f"-- 修复脚本：{args.target_name}\n")
+        f.write(f"-- 修复脚本：{args.target_name}（{args.target_db_type.upper()}）\n")
+        if args.target_db_type == 'sqlserver':
+            f.write("-- 执行: 每条语句以 GO 结尾分批，SSMS/sqlcmd 可整文件执行，也可按 GO 逐批执行\n")
+        else:
+            f.write("-- 执行: 普通语句以 ; 结尾逐条执行；/ 仅用于结束 PL/SQL 匿名块，不可加在普通语句后\n")
         f.write(f"-- 生成时间：{__import__('datetime').datetime.now()}\n")
         f.write(f"-- 不安全修改：{unsafe_count}，安全修改：{safe_count}\n\n")
         

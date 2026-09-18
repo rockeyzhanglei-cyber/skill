@@ -357,7 +357,7 @@ def generate_row_size_optimization(table_name, csv_cols, new_cols_info, db_type,
         sql = (
             f"IF OBJECT_ID('{table_name}', 'U') IS NOT NULL "
             f"AND EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('{table_name}') AND name = '{col_name}')\n"
-            f"    ALTER TABLE {t} ALTER COLUMN {c} VARCHAR(MAX) {null_str};"
+            f"    ALTER TABLE {t} ALTER COLUMN {c} VARCHAR(MAX) {null_str};\nGO"
         )
         
         comment = f"-- {table_name}.{col_name} 行大小超限，改为 VARCHAR(MAX) 不计入 8060 限制（原类型 {col_info.get('type')}({length})，释放 {freed} 字节）"
@@ -432,6 +432,14 @@ def build_csv_structure(rows):
         if raw_default.upper() == 'NULL':
             raw_default = ''
 
+        # 主键判定（容错）：优先 PK_FLAG='Y' 且 PK_CONSTRAINT_NAME 非空；
+        # 旧版 SQL Server 导出会把普通索引列标成 PK_FLAG='Y' 但约束名为空，不能直接信 PK_FLAG。
+        pk_flag = row.get('PK_FLAG', 'N').strip().upper()
+        pk_con = (row.get('PK_CONSTRAINT_NAME', '') or '').strip()
+        if pk_con and pk_con.upper() != 'NULL':
+            is_pk = (pk_flag == 'Y')
+        else:
+            is_pk = False  # 有约束名列但值为空 -> 视为非主键（索引污染行）
         col_info = {
             'type': row.get('DATA_TYPE', '').strip().upper(),
             'length': safe_int(row.get('CHAR_LENGTH', '0')),
@@ -439,7 +447,7 @@ def build_csv_structure(rows):
             'scale': safe_int(row.get('DATA_SCALE', '')),
             'nullable': row.get('NULLABLE', 'Y').strip().upper(),
             'default': raw_default,
-            'pk': row.get('PK_FLAG', 'N').strip().upper(),
+            'pk': 'Y' if is_pk else 'N',
         }
 
         tables[table_name]['columns'][column_name.upper()] = col_info
@@ -495,6 +503,13 @@ def doc_type_to_db(data_type, format_str, db_type):
             return 'DATETIME', None
         else:
             return 'DATE', None
+
+    elif data_type.upper() == 'BY':
+        # 二进制型（照片/文件等二进制数据；区域卫生信息传输规范定义）
+        if is_sqlserver:
+            return 'VARBINARY', 'MAX'
+        else:
+            return 'BLOB', None
 
     return None, None
 
@@ -672,7 +687,7 @@ def _generate_alter_sql(table_name, col_name, type_def, nullable, db_type, actio
                 f"IF OBJECT_ID('{table_name}', 'U') IS NOT NULL "
                 f"AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('{table_name}') AND name = '{col_name}')"
             )
-            alter_line = f"    {inner_sql}"
+            alter_line = f"    {inner_sql}\nGO"
             if commented:
                 return f"-- {if_line}\n-- {alter_line}"
             return f"{if_line}\n{alter_line}"
@@ -686,7 +701,7 @@ def _generate_alter_sql(table_name, col_name, type_def, nullable, db_type, actio
                 f"IF OBJECT_ID('{table_name}', 'U') IS NOT NULL "
                 f"AND EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('{table_name}') AND name = '{col_name}')"
             )
-            alter_line = f"    {inner_sql}"
+            alter_line = f"    {inner_sql}\nGO"
             if commented:
                 return f"-- {if_line}\n-- {alter_line}"
             return f"{if_line}\n{alter_line}"
@@ -893,7 +908,7 @@ def compare_structures(md_structure, csv_structure, db_type, tran_log_mode='fiel
             create_sql = f"CREATE TABLE {t} (\n{col_defs_str}\n);"
             return (
                 f"IF OBJECT_ID('{tname}', 'U') IS NULL\n"
-                f"BEGIN\n{create_sql}\nEND;"
+                f"BEGIN\n{create_sql}\nEND;\nGO"
             )
         else:
             # Oracle EXECUTE IMMEDIATE 内 DDL 末尾不可带分号，否则 ORA-00911
@@ -1292,7 +1307,7 @@ def compare_structures(md_structure, csv_structure, db_type, tran_log_mode='fiel
         col_defs_str = ",\n".join(col_defs)
 
         if is_sqlserver:
-            create_sql = f"CREATE TABLE {t} (\n{col_defs_str}\n);"
+            create_sql = f"CREATE TABLE {t} (\n{col_defs_str}\n);\nGO"
         else:
             # EXECUTE IMMEDIATE 内单引号需双写转义（如 DEFAULT '0' → DEFAULT ''0''）
             col_defs_str_escaped = col_defs_str.replace("'", "''")
@@ -1312,7 +1327,8 @@ def compare_structures(md_structure, csv_structure, db_type, tran_log_mode='fiel
         if is_sqlserver:
             drop_part = (
                 f"IF OBJECT_ID('{tname}', 'U') IS NOT NULL\n"
-                f"    DROP TABLE {t};"
+                f"    DROP TABLE {t};\n"
+                f"GO"
             )
             header = (
                 f"-- ============================================\n"
@@ -1320,6 +1336,7 @@ def compare_structures(md_structure, csv_structure, db_type, tran_log_mode='fiel
                 f"-- ⚠️ 会清空该表全部数据\n"
                 f"-- ============================================"
             )
+            # GO 分批：DROP 与 CREATE 必须分属不同批次，否则同批编译时 CREATE 仍看到旧表而报"对象已存在"
             raw_block = drop_part + "\n\n" + create_sql
             return header + "\n" + raw_block
         else:
@@ -1421,6 +1438,7 @@ def compare_structures(md_structure, csv_structure, db_type, tran_log_mode='fiel
             char_types = ('VARCHAR', 'VARCHAR2', 'CHAR', 'NVARCHAR', 'NCHAR', 'CLOB', 'NCLOB')
             num_types = ('NUMBER', 'NUMERIC', 'INT', 'BIGINT', 'SMALLINT', 'DECIMAL')
             date_types = ('DATE', 'DATETIME', 'DATETIME2', 'SMALLDATETIME')
+            binary_types = ('BLOB', 'VARBINARY', 'BINARY', 'RAW', 'LONG RAW', 'IMAGE')
 
             if expected_type in char_types:
                 if csv_type in char_types:
@@ -1430,6 +1448,9 @@ def compare_structures(md_structure, csv_structure, db_type, tran_log_mode='fiel
                     type_match = True
             elif expected_type in date_types:
                 if csv_type in date_types:
+                    type_match = True
+            elif expected_type in binary_types:
+                if csv_type in binary_types:
                     type_match = True
 
             if not type_match:
@@ -1616,11 +1637,17 @@ def main():
     from datetime import datetime
     output_parts = []
 
+    exec_note = (
+        "-- 执行: 每条语句以 GO 结尾分批，SSMS/sqlcmd 可整文件执行，也可按 GO 逐批执行\n"
+        if db_type.lower() == 'sqlserver' else
+        "-- 执行: PL/SQL 匿名块以 / 结尾分隔，sqlplus/PLSQL Developer 可整文件执行，也可逐块执行\n"
+    )
     output_parts.append(
         "-- ========================================\n"
         "-- 数据库修复脚本\n"
         f"-- 目标: {db_type.upper()}\n"
         f"-- 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"{exec_note}"
         "-- ========================================\n"
     )
 

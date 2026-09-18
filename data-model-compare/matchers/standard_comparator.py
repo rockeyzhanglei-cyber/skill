@@ -16,6 +16,8 @@ from parsers.standard_parser import StandardDocument, StandardTable, StandardFie
 
 # 规则核心模块（唯一事实来源）：核心概念/显式同义判定统一入口
 from matchers.matching_core import core_compatible, in_explicit_synonym_dict, strip_generic
+from matchers.matching_core import cn_key as _cn_key
+from matchers.matching_core import NORMALIZE_MAP as _NORMALIZE_MAP
 from matchers import field_compatibility
 from matchers import auto_relation
 from matchers import text_utils
@@ -25,6 +27,28 @@ from matchers.matching_core import GENERIC_SUFFIXES as _CORE_GENERIC_SUFFIXES
 
 # 引入缓存
 from utils.cache import get_similarity_from_cache, put_similarity_to_cache
+
+# 人工复核同义写法归一（v2.0.3）：NORMALIZE_MAP 按 key 长度降序预排序，
+# 避免"医师"被"医生"先替换后再命中"医生"子串的错序问题。
+# 用于 keyword 清理路径，在"主题词网关"之前把同义字对先归一，避免残基被网关误判。
+_SYN_NORM_ORDER = sorted(_NORMALIZE_MAP.keys(), key=len, reverse=True)
+
+
+def _SYN_NORM(s: str) -> str:
+    if not s:
+        return s
+    for k in _SYN_NORM_ORDER:
+        if k:
+            s = s.replace(k, _NORMALIZE_MAP[k])
+    return s
+
+
+# 括号内说明性附注（v2.0.3 补）：如 "入院病情(对应主要诊断)" 的 "(对应主要诊断)"、
+# "产后宫底高度(cm)" 的 "(cm)"、"损伤中毒外部原因(其他)" 等。这类附注不改变字段
+# 核心语义，但会污染"主题词网关"的残基判定，导致同义字段被误判为不同主题
+# （山东实测 m_dis_cond 漏配）。在 keyword 清理路径剥除，与 normalize_concept 一致。
+_STRIP_PAREN_RE = re.compile(r'[（(][^）)]*[）)]')
+
 
 
 # ============================================================================
@@ -462,9 +486,9 @@ class StandardComparator:
                     'reason': nt.get('reason', '用户确认整表新增')
                 })
 
-        # 兼容性规则引擎
+        # 兼容性规则引擎（规则文件经知识库管理器统一装载/缓存，避免重复读盘）
         from rules.compatibility_engine import CompatibilityEngine
-        self.compatibility_engine = CompatibilityEngine(skill_dir)
+        self.compatibility_engine = CompatibilityEngine(skill_dir, kb_manager=self.kb)
 
         # 匹配结果缓存（避免 _find_matching_field 重复调用）
         from utils.cache import LRUCache
@@ -487,7 +511,13 @@ class StandardComparator:
         }
 
     def _load_synonyms(self) -> Dict[str, List[str]]:
-        """从统一的 field_synonyms.yaml 加载同义词映射"""
+        """【已废弃·保留备查】功能已由 KnowledgeBaseManager._load_field_synonyms 接管。
+
+        本方法当前无任何调用方：__init__ 通过 self.kb（manager）取得
+        self.synonyms / self.synonym_exclude_list（见 __init__ L406-409）。
+        保留原因：万一需要回退独立装载路径，可直接复用本实现的逻辑。
+        请勿在新增代码中调用本方法。
+        """
         import yaml
         import os
 
@@ -930,8 +960,13 @@ class StandardComparator:
             return ""
         # 去除*号
         name = re.sub(r'\*', '', name)
-        # 去除括号内容（包括英文标识符如(m_cli_advices_undrug)）
-        name = re.sub(r'\([^)]*\)', '', name)
+        # 去除括号内容（包括英文标识符如(m_cli_advices_undrug)，以及山东标准常见的
+        # 半角开+全角闭混合括号如 入院记录-诊断(辅 D08 标） / 影像诊断报告( D07 标））。
+        # 注意：山东电子病历标准的"辅助表"标记使用 ASCII 开括号 + 全角闭括号，
+        # 旧的正则 \([^)]*\) 只匹配全角括号对，会漏掉这类后缀，导致
+        # 入院记录-诊断(辅 D08 标） 无法归一为 入院记录-诊断，进而匹配不到同义词
+        # 入出院诊断记录。统一按 [（(][^）)]*[）)] 处理两种括号。
+        name = re.sub(r'[（(][^）)]*[）)]', '', name)
         # 去除末尾的拼音缩写（如 "MZYZMXB"、"ZYYZMXB" 等）
         name = re.sub(r'\s+[A-Z][A-Z0-9_]+\s*$', '', name)
         # 去除通用后缀
@@ -941,8 +976,14 @@ class StandardComparator:
                 break
         return name.strip()
 
-    def _is_table_synonym(self, name1: str, name2: str) -> bool:
-        """检查两个表名是否通过同义词库匹配"""
+    def _is_table_synonym(self, name1: str, name2: str, explicit_only: bool = False) -> bool:
+        """检查两个表名是否通过同义词库匹配
+
+        explicit_only=True：仅走"精确归一 + 显式同义词库"判定（不含模糊兜底），
+        供 _find_matching_table 第一趟优先使用，确保人工校订的同义词一定先于
+        "业务核心概念兜底"生效，避免代码字典表(疾病诊断目录)按源表顺序抢先命中
+        记录表(入出院诊断记录)。
+        """
         if not name1 or not name2:
             return False
 
@@ -970,6 +1011,10 @@ class StandardComparator:
 
             if name1_in_group and name2_in_group:
                 return True
+
+        # 显式同义词判定到此为止（不含下方模糊兜底）
+        if explicit_only:
+            return False
 
         # 直接包含关系（如"门急诊挂号"包含"门诊挂号"）
         if len(norm1) > len(norm2):
@@ -1288,7 +1333,21 @@ class StandardComparator:
             if target_table.chinese_name and target_table.chinese_name == source_table.chinese_name:
                 return source_table
 
-        # 3. 表同义词匹配（新增）
+        # 3. 表同义词匹配（显式优先，再模糊兜底）
+        # 3a. 显式同义词优先（explicit_only=True：仅精确归一 + 同义词库，不含
+        #     "业务核心概念兜底"）。确保人工校订的同义词一定先于代码字典表/跨域表
+        #     按源表顺序抢先命中，例如 入院记录-诊断 必须对齐 入出院诊断记录 而非
+        #     疾病诊断目录（前者为记录表、后者为代码字典表）。
+        for source_table in source_table_index.values():
+            if self._is_table_synonym(target_table.chinese_name, source_table.chinese_name, explicit_only=True):
+                return source_table
+            if self._is_table_synonym(target_table.name, source_table.name, explicit_only=True):
+                return source_table
+            if self._is_table_synonym(target_table.chinese_name, source_table.name, explicit_only=True):
+                return source_table
+            if self._is_table_synonym(target_table.name, source_table.chinese_name, explicit_only=True):
+                return source_table
+        # 3b. 模糊兜底（含业务核心概念兜底）
         for source_table in source_table_index.values():
             # 检查中文名
             if self._is_table_synonym(target_table.chinese_name, source_table.chinese_name):
@@ -1350,6 +1409,67 @@ class StandardComparator:
             self._field_origin_cache = cache
         return cache.get(id(source_field))
 
+    # ===== 主键角色归一（v2.0.4）=====
+    # 山东标准普遍以"内码"（ID / XX内码）作表主键；V6.0 区域平台以"系统编码"
+    # （SYS_SOID）或"XX唯一标识"作主键。二者语义完全一致：都是"唯一标识一行记录"
+    # 的主键。单纯字符串归一（内码→标识）在关键词通道会因残基为空 / 表名前缀不同而
+    # 失效（裸"内码"归一后残基为空被空残基早退拦截；"入院记录内码"主体"入院记录"
+    # 与"入出院诊断记录唯一标识"主体"入出院诊断记录"不互含），故以"主键角色"维度
+    # 做显式配对：同表对齐后，目标主键字段优先命中源主键字段。
+    # 评分：通用主键(无主体, 内码↔系统编码)互配=2；同主体包含(如 住院就诊记录内码↔
+    # 住院就诊记录唯一标识)=1；其余=-1（不接受，避免把 个人内码 错配 系统编码）。
+    def _is_pk_role(self, field, side: str) -> bool:
+        cn = (field.chinese_name or '').strip()
+        en = (field.name or '').strip()
+        if side == 'target':
+            return cn == '内码' or cn.endswith('内码') or en == 'ID'
+        # source
+        return cn == '系统编码' or cn.endswith('唯一标识') or en == 'SYS_SOID'
+
+    @staticmethod
+    def _pk_subject(name: str) -> str:
+        """剥掉主键尾词，取主体（用于跨表同名主键配对 / 前缀对齐）。"""
+        import re as _re
+        s = name or ''
+        s = _re.sub(r'(内码|唯一标识|系统编码|标识)$', '', s)
+        for suf in ('信息', '记录', '明细', '报告', '表'):
+            if s.endswith(suf):
+                s = s[:-len(suf)]
+                break
+        return s.strip()
+
+    def _pk_role_matches(self, target_table, source_table):
+        """返回 {target_field_name: (source_field, 'pk_role')}。"""
+        out = {}
+        t_pks = [f for f in target_table.fields if self._is_pk_role(f, 'target')]
+        s_pks = [f for f in source_table.fields if self._is_pk_role(f, 'source')]
+        if not t_pks or not s_pks:
+            return out
+        used = set()
+        for tf in t_pks:
+            t_subj = self._pk_subject(tf.chinese_name or tf.name)
+            best = None
+            best_score = -1
+            for sf in s_pks:
+                if id(sf) in used:
+                    continue
+                s_subj = self._pk_subject(sf.chinese_name or sf.name)
+                if t_subj == '' and s_subj == '':
+                    sc = 2          # 通用主键互配：内码 ↔ 系统编码
+                elif t_subj == '' or s_subj == '':
+                    sc = -1
+                elif t_subj in s_subj or s_subj in t_subj:
+                    sc = 1          # 同主体前缀对齐
+                else:
+                    sc = -1
+                if sc > best_score:
+                    best_score = sc
+                    best = sf
+            if best is not None and best_score >= 0:
+                out[tf.name] = (best, 'pk_role')
+                used.add(id(best))
+        return out
+
     def _compare_fields(self, source_table: StandardTable, target_table: StandardTable,
                        result: CompareResult, extra_source_tables: list = None,
                        source_table_index: Dict[str, StandardTable] = None):
@@ -1363,6 +1483,10 @@ class StandardComparator:
                 for field in extra_table.fields:
                     if field.name not in source_field_index:
                         source_field_index[field.name] = field
+
+        # 主键角色归一（v2.0.4）：先算好 {目标字段名: (源字段, 'pk_role')}，
+        # 在第一遍匹配前优先命中，避免主键被关键词/跨表通道错配或漏配。
+        pk_matches = self._pk_role_matches(target_table, source_table)
 
         # ===== 新增：序号字段组检测（主子表展开策略，通用自动检测）=====
         numbered_field_matches = self._detect_numbered_field_groups(
@@ -1393,6 +1517,25 @@ class StandardComparator:
             if target_field.name in numbered_field_matches:
                 field_match_status[target_field.name] = 'numbered_group'
                 continue
+
+            # 主键角色归一（v2.0.4）：内码/XX内码/ID ↔ 系统编码/XX唯一标识/SYS_SOID。
+            # 尊重用户自定义映射：若本字段存在 user_custom 映射，则交给下方常规匹配，
+            # 不在此抢先命中（避免覆盖人工确认结论）。
+            if target_field.name in pk_matches:
+                _tk = f"{target_table.chinese_name or target_table.name}.{target_field.chinese_name or target_field.name}"
+                _um = (self.kb.field_mappings.get(_tk) or
+                       self.kb.field_mappings.get(target_field.name) or
+                       self.kb.field_mappings.get(target_field.chinese_name))
+                if not (_um and _um.get('match_type') == 'user_custom'):
+                    sf, mt = pk_matches[target_field.name]
+                    if getattr(self, '_p6_occupied', None) is not None:
+                        self._p6_occupied.setdefault(target_table.name, {})[
+                            sf.chinese_name or sf.name] = (
+                            target_field.chinese_name or target_field.name)
+                    modifications = self._check_modifications(sf, target_field)
+                    field_match_results[target_field.name] = ((sf, mt), modifications)
+                    field_match_status[target_field.name] = 'modified' if modifications else 'matched'
+                    continue
 
             match_result = self._find_matching_field(
                 target_field, source_field_index, source_table, source_table_index, target_table)
@@ -2069,7 +2212,8 @@ class StandardComparator:
                 if not self._auto_relation_reuse_allowed(claimed_cn, cn):
                     continue
             rank = None
-            if cn and cn == s_cn:
+            if cn and self._cn_key_cached(cn) == self._cn_key_cached(s_cn):
+                # v2.0.3 字形归一精确：P6 表内字段同样存在全角/异体字写法差异
                 rank = (0, sf, 'auto_relation_exact')
             elif self.use_synonym and self._auto_rel_synonym_match(cn, s_cn):
                 rank = (1, sf, 'auto_relation_synonym')
@@ -2091,6 +2235,11 @@ class StandardComparator:
                     continue
                 rank = (3, sf, 'auto_relation_keyword')
             if rank is None:
+                # 互斥限定词兜底门禁（v2.0.3）：走到残基匹配的名字已带地址/卡
+                # 前缀，但前缀剥离后残基可能仍含互斥对（根本/直接、入院前/后），
+                # 在低置信兜底层统一拦截。
+                if field_compatibility.mutex_qualifier_conflict(cn, s_cn):
+                    continue
                 # 残基匹配（rank=4）：剥离地址/卡类型前缀后，按层级关键词匹配。
                 # 低于 keyword 的 3，确保精确/同义/语义/keyword 优先。
                 if cn and self._auto_rel_residue_match(cn, s_cn):
@@ -2309,22 +2458,40 @@ class StandardComparator:
         return None
 
     def _global_cn_lookup(self, cn: str, source_table_index: Dict[str, StandardTable]):
-        """在全部源表中按中文名查找字段（用于跨表精确匹配复用）。结果按源表索引缓存。"""
+        """在全部源表中按中文名查找字段（用于跨表精确匹配复用）。结果按源表索引缓存。
+
+        v2.0.3：缓存键与查询键均用 cn_key 字形归一（全角→半角、査→查、
+        适应证→适应症），使"产后宫底高度（cm）"（全角目标）能命中
+        "产后宫底高度(cm)"（半角源）这类跨表同元字段。
+        """
         cache = getattr(self, '_gcn_cache', None)
         if cache is None:
             cache = {}
             for st in source_table_index.values():
                 for sf in st.fields:
                     if sf.chinese_name:
-                        cache.setdefault(sf.chinese_name, []).append(sf)
+                        cache.setdefault(self._cn_key_cached(sf.chinese_name), []).append(sf)
             self._gcn_cache = cache
-        hits = cache.get(cn)
+        hits = cache.get(self._cn_key_cached(cn))
         if not hits:
             return None
         # 优先返回与描述兼容的字段；否则返回首个
         for sf in hits:
             return sf
         return None
+
+    _CN_KEY_CACHE = {}
+
+    @classmethod
+    def _cn_key_cached(cls, cn: str) -> str:
+        """cn_key 的类级缓存版（exact/全局查找高频调用，字段名集合高度重复）。"""
+        if cn is None:
+            return ''
+        key = cls._CN_KEY_CACHE.get(cn)
+        if key is None:
+            key = _cn_key(cn)
+            cls._CN_KEY_CACHE[cn] = key
+        return key
 
 
     # 地址位置前缀（不剥离，保留作消歧）：来源 V6.0 用"现住址/户籍地址/
@@ -2941,8 +3108,14 @@ class StandardComparator:
 
             if priority == 'exact_chinese':
                 # 1. 精确匹配中文名（当前对齐源表内）
+                # v2.0.3 字形归一：两侧经 cn_key 归一（全角→半角、査→查、
+                # 适应证→适应症）后比较。山东实测：产后宫底高度（cm）全角
+                # vs 产后宫底高度(cm) 半角、CT检査结果 査 vs CT检查结果 查，
+                # 此前 exact 漏配跌落 keyword 误配——归一后在最高优先级通道直接命中。
                 for source_field in source_field_index.values():
-                    if target_field.chinese_name and target_field.chinese_name == source_field.chinese_name:
+                    if (target_field.chinese_name and source_field.chinese_name
+                            and self._cn_key_cached(target_field.chinese_name)
+                            == self._cn_key_cached(source_field.chinese_name)):
                         # 验证：如果字段说明不兼容，则跳过
                         if not self._is_description_compatible(target_field, source_field):
                             continue
@@ -3610,18 +3783,32 @@ class StandardComparator:
             return False
 
         # 字段种类网关：名称/代码/流水号 等类型不一致不兼容
+        # （v2.0.3 起含 TEMPORAL 时间类：交接班日期 ≠ 交接班记录唯一标识）
         if not self._field_kind_compatible(name1, name2):
+            return False
+
+        # 互斥限定词网关（v2.0.3）：根本死亡原因代码 ≠ 直接死亡原因编码、
+        # 入院后昏迷天数 ≠ 入院前昏迷天数（对称判定，数据驱动扩表）
+        if field_compatibility.mutex_qualifier_conflict(name1, name2):
             return False
 
         # 复合名主体网关：子表主键不得错配到主表主键
         if not self._composite_subject_compatible(name1, name2):
             return False
 
-        # 清理：去除常见后缀和通用词
+        # 清理：字形归一（全角→半角、査→查、适应证→适应症 等，v2.0.3）
+        # + 人工复核同义写法归一（医师→医生、科别→科室 等，v2.0.3）
+        # + 去除常见后缀和通用词
+        #
+        # 关键：NORMALIZE_MAP 必须在"主题词网关"之前应用。否则同义字对的残基
+        # （总检医师 vs 总检医生、出院科别 vs 出院科室）会被网关误判为不同主题而漏配。
         suffixes = ['名称', '代码', '编码', '标识', '标志', '日期', '时间']
         common_words = ['类型', '信息', '记录', '表']  # 通用词，不应作为匹配依据
-        clean1 = name1
-        clean2 = name2
+        clean1 = _SYN_NORM(self._cn_key_cached(name1))
+        clean2 = _SYN_NORM(self._cn_key_cached(name2))
+        # 去除括号内说明性附注（v2.0.3 补）：避免污染主题词网关残基判定
+        clean1 = _STRIP_PAREN_RE.sub('', clean1)
+        clean2 = _STRIP_PAREN_RE.sub('', clean2)
         for s in suffixes + common_words:
             clean1 = clean1.replace(s, '')
             clean2 = clean2.replace(s, '')
@@ -3642,6 +3829,12 @@ class StandardComparator:
         # 如果较短的字符串完全包含在较长的字符串中，且长度差异超过50%，则不匹配
         shorter, longer = (clean1, clean2) if len(clean1) <= len(clean2) else (clean2, clean1)
         if shorter in longer and len(shorter) / len(longer) < 0.5:
+            return False
+
+        # 主题词网关（v2.0.3）：剥离公共首尾后剩余主体互不包含 -> 不同主题。
+        # 心理护理描述 ≠ 导管护理描述、使用中医诊疗技术标志 ≠ 是否使用中医诊疗设备
+        # （n-gram 只看共有占比，忽略差异主题修饰，此处补位拦截）
+        if not field_compatibility.keyword_subject_compatible(clean1, clean2):
             return False
 
         # 提取n-gram
@@ -3879,6 +4072,11 @@ class StandardComparator:
 
         # 字段种类网关：名称/代码/流水号 等类型不一致不兼容
         if not self._field_kind_compatible(name1, name2):
+            return False
+
+        # 互斥限定词网关（v2.0.3）：根本 ≠ 直接、入院前 ≠ 入院后 等，
+        # 与 keyword 通道同一套数据驱动判定
+        if field_compatibility.mutex_qualifier_conflict(name1, name2):
             return False
 
         # 复合名主体网关：子表主键不得错配到主表主键

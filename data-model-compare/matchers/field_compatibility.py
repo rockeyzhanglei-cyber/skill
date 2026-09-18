@@ -49,6 +49,11 @@ FIELD_KIND_ADDR = {'地址', '住址'}
 # （严重不良事件报告流水号 ≠ 不良事件报告人职业）
 FIELD_KIND_ATTR = {'职业', '性别', '年龄', '民族', '国籍', '学历',
                    '婚姻状况', '职务', '职称', '籍贯'}
+# 时间类（v2.0.3）：日期/时间 与 名称/代码/标识/流水号/签名 等是完全不同的
+# 数据元（交接班日期 ≠ 交接班记录唯一标识、法定代理人签名日期 ≠
+# 法定代理人与患者的关系代码——山东实测 keyword 误配）。TEMPORAL 与
+# 其他一切种类互斥；未知尾词（OTHER）不拦，避免过度阻断。
+FIELD_KIND_TEMPORAL = {'日期时间', '日期', '时间'}
 
 
 def is_field_mapping_compatible(target_field, source_field, field_mapping) -> bool:
@@ -363,7 +368,7 @@ def field_kind_of(name: str) -> str:
     kinds = (FIELD_KIND_NAME | FIELD_KIND_CODE |
              FIELD_KIND_SERIAL | FIELD_KIND_IDENT |
              FIELD_KIND_ATTR | FIELD_KIND_SIGN |
-             FIELD_KIND_ADDR)
+             FIELD_KIND_ADDR | FIELD_KIND_TEMPORAL)
     for k in sorted(kinds, key=len, reverse=True):
         if name.endswith(k):
             return k
@@ -394,6 +399,8 @@ def field_kind_compatible(name1: str, name2: str) -> bool:
             return 'SIGN'
         if k in FIELD_KIND_ADDR:
             return 'ADDR'
+        if k in FIELD_KIND_TEMPORAL:
+            return 'TEMPORAL'
         return 'OTHER'
 
     c1, c2 = _cat(field_kind_of(name1)), _cat(field_kind_of(name2))
@@ -418,6 +425,11 @@ def field_kind_compatible(name1: str, name2: str) -> bool:
     # 只拦 SERIAL/IDENT，不拦 CODE——因为"性别代码"与"性别"在标准中常指同一数据元，
     # 拦 CODE 会造成漏配。
     if 'ATTR' in (c1, c2) and ('SERIAL' in (c1, c2) or 'IDENT' in (c1, c2)):
+        return False
+    # 时间类 vs 其他一切种类不兼容（v2.0.3）：
+    # 交接班日期 ≠ 交接班记录唯一标识、法定代理人签名日期 ≠ 法定代理人关系代码。
+    # TEMPORAL 与 TEMPORAL 相同种类，放行。
+    if ('TEMPORAL' in (c1, c2)) and c1 != c2:
         return False
     return True
 
@@ -484,3 +496,103 @@ def is_concept_compatible_for_synonym(name1: str, name2: str) -> bool:
         return False
 
     return True
+
+
+# ============================================================================
+# 互斥限定词网关（v2.0.3）
+# ============================================================================
+# 同一"格位"内的词两两互斥：一个字段只能取其一（根本原因 ≠ 直接原因、
+# 入院前 ≠ 入院后）。此前 auto_relation.EXCLUSION_QUALIFIERS 只覆盖
+# "其他/其它/其余/另"（且只拦"目标有、源无"的单向场景，注意这四个词
+# 本身是【同义组】而非互斥组——"其他费用"与"其余费用"是同一概念，
+# 因此不纳入本互斥表），山东实测暴露出需要对称拦截的新对：
+#   根本死亡原因代码(target) vs 直接死亡原因编码(source)
+#   入院后昏迷天数(target)   vs 颅脑损伤患者入院前昏迷天数(source)
+# 数据驱动设计：新增互斥对只需扩表，不改判定逻辑。
+MUTEX_QUALIFIER_GROUPS = (
+    # 死亡原因层级：根本原因（underlying）≠ 直接原因（immediate）
+    ('根本', '直接'),
+    # 手术/操作时相
+    ('术前', '术中', '术后'),
+    # 产程时相
+    ('产前', '产后', '产时'),
+)
+
+
+def _direction_keys(name: str) -> set:
+    """提取字段名中的方位词键（前/后），词位 = 方向字前 1 字上下文。
+
+    入院后昏迷天数 -> {'院后'}；颅脑损伤患者入院前昏迷天数 -> {'院前'}。
+    上下文取方向字之前的 1 个汉字：足以区分 入院前/入院后、产前/产后、
+    术前/术后 等常见时相短语，又不因主体前缀差异（颅脑损伤患者+入院前）
+    而错判。位于字符串开头时用 '^' 占位上下文（前囟 vs 后囟 也能成键）。
+
+    保守性：不同短语若恰好共享末字（出院前/入院前 -> 都是'院前'）不判冲突，
+    宁可漏拦不可误拦——互斥网关只对"证据明确"的方向对（同首字+异方向）生效。
+    """
+    keys = set()
+    if not name:
+        return keys
+    for i, ch in enumerate(name):
+        if ch in ('前', '后'):
+            ctx = name[i - 1] if i >= 1 else '^'
+            keys.add(ctx + ch)
+    return keys
+
+
+def mutex_qualifier_conflict(name1: str, name2: str) -> bool:
+    """判断两个字段名是否含同一格位内的互斥限定词（对称硬冲突）。
+
+    返回 True = 存在互斥冲突（应拒绝匹配）。
+    与 auto_relation.exclusion_qualifier_conflict（单向"目标有其他、源无"）
+    互补：本函数做对称判定——任意一侧持有格位内某词、另一侧持有同格位
+    不同词即冲突；同一词（如双方都含"产后"）不冲突。
+    前/后 方位词按 _direction_keys 词位判定，避免拆字误伤。
+    """
+    if not name1 or not name2:
+        return False
+    for group in MUTEX_QUALIFIER_GROUPS:
+        h1 = {q for q in group if q in name1}
+        h2 = {q for q in group if q in name2}
+        if h1 and h2 and not (h1 & h2):
+            return True
+    d1 = _direction_keys(name1)
+    d2 = _direction_keys(name2)
+    if d1 and d2 and not (d1 & d2):
+        return True
+    return False
+
+
+# ============================================================================
+# 主题词网关（v2.0.3）
+# ============================================================================
+def keyword_subject_compatible(clean1: str, clean2: str) -> bool:
+    """keyword 通道主题词网关：剥离公共首尾后，剩余主体必须相容。
+
+    背景（山东实测误配）：n-gram 重叠率只看共有 gram 占比，忽略" differing
+    主题修饰词"——心理护理描述 vs 导管护理描述（共享"护理描述"、主题
+    心理≠导管）、产后宫底高度 vs 产后宫缩（共享"产后"、宫底≠宫缩）。
+    规则：找最长公共前缀 + 最长公共后缀（不重叠），剩余主体若双方
+    均非空且互不包含 -> 不同主题，拒绝。
+    单侧剩余为空（一方是另一方的前/后缀扩展，如 检查部位 vs 检查部位所见）
+    或剩余主体存在包含关系 -> 放行，交由 n-gram 正常决策。
+    """
+    if not clean1 or not clean2:
+        return True
+    # 最长公共前缀
+    p = 0
+    while p < len(clean1) and p < len(clean2) and clean1[p] == clean2[p]:
+        p += 1
+    # 最长公共后缀（不与已消耗的前缀重叠）
+    s = 0
+    while (s < len(clean1) - p and s < len(clean2) - p
+           and clean1[len(clean1) - 1 - s] == clean2[len(clean2) - 1 - s]):
+        s += 1
+    r1 = clean1[p:len(clean1) - s] if s else clean1[p:]
+    r2 = clean2[p:len(clean2) - s] if s else clean2[p:]
+    if not r1 or not r2:
+        return True
+    # 剩余主体互不包含 -> 主题不同
+    if r1 in r2 or r2 in r1:
+        return True
+    return False

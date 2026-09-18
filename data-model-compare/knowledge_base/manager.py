@@ -9,6 +9,7 @@
 - field_mappings.yaml: 字段映射配置
 - numbered_field_groups.yaml: 序号字段组配置
 - learned_mappings.yaml: 已学习的表映射
+- compatibility_rules.yaml: 字段兼容性规则（供 rules/compatibility_engine.py 消费）
 - relations/*.yaml: 表关联关系
 
 特性：
@@ -61,6 +62,7 @@ class KnowledgeBaseManager:
             ('field_mappings', self._load_field_mappings),
             ('numbered_field_groups', self._load_numbered_field_groups),
             ('learned_mappings', self._load_learned_mappings),
+            ('compatibility_rules', self._load_compatibility_rules),
             ('relations', self._load_relations),
             ('user_custom_mappings', self._load_user_custom_mappings),
         ]
@@ -113,6 +115,11 @@ class KnowledgeBaseManager:
         return self._cache.get('learned_mappings', {})
 
     @property
+    def compatibility_rules(self) -> Dict[str, dict]:
+        """字段兼容性规则（raw YAML，供 rules/compatibility_engine.py 构建规则对象）"""
+        return self._cache.get('compatibility_rules', {})
+
+    @property
     def relations(self) -> Dict:
         """表关联关系"""
         return self._cache.get('relations', {
@@ -138,6 +145,7 @@ class KnowledgeBaseManager:
                 'field_mappings': self._load_field_mappings,
                 'numbered_field_groups': self._load_numbered_field_groups,
                 'learned_mappings': self._load_learned_mappings,
+                'compatibility_rules': self._load_compatibility_rules,
                 'relations': self._load_relations,
             }
             loader = loader_map.get(name)
@@ -169,6 +177,7 @@ class KnowledgeBaseManager:
             'field_mappings': 'field_mappings.yaml',
             'numbered_field_groups': 'numbered_field_groups.yaml',
             'learned_mappings': 'learned_mappings.yaml',
+            'compatibility_rules': 'compatibility_rules.yaml',
         }
         for name, filename in name_file_map.items():
             path = os.path.join(self.kb_dir, filename)
@@ -273,6 +282,12 @@ class KnowledgeBaseManager:
                     if info.get('target_alt'):
                         mappings[source_name + '_alt'] = info['target_alt']
         self._cache['learned_mappings'] = mappings
+
+    def _load_compatibility_rules(self):
+        """加载字段兼容性规则（raw 结构，由 rules/compatibility_engine.py 解析为规则对象）"""
+        path = os.path.join(self.kb_dir, 'compatibility_rules.yaml')
+        data = self._load_yaml_with_cache(path)
+        self._cache['compatibility_rules'] = data.get('compatibility_rules', {}) if data else {}
 
     # 容易因“所在表”不同而有不同对应源字段的歧义字段，不做跨表全局复用
     # （例如“姓名”在患者表对应 FULL_NAME，在医护人员表对应 EMPLOYEE_NAME）
@@ -446,6 +461,7 @@ class KnowledgeBaseManager:
             'field_mappings': 'field_mappings.yaml',
             'numbered_field_groups': 'numbered_field_groups.yaml',
             'learned_mappings': 'learned_mappings.yaml',
+            'compatibility_rules': 'compatibility_rules.yaml',
         }
         filename = file_map.get(name, '')
         return os.path.join(self.kb_dir, filename) if filename else ''
@@ -458,6 +474,7 @@ class KnowledgeBaseManager:
             'field_mappings': {},
             'numbered_field_groups': {},
             'learned_mappings': {},
+            'compatibility_rules': {},
             'relations': {'joins': [], 'table_roles': {}, 'key_mappings': {}, 'adjacency': {}},
         }
         return defaults.get(name, {})

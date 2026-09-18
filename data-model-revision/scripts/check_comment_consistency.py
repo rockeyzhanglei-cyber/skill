@@ -90,6 +90,12 @@ def strip_no(item):
     return re.sub(r"^\d+\.\s*", "", item)
 
 
+def norm_del(item):
+    """删除字段条目归一化：spec 第 4 节允许 DDL 与修订记录括号内写各自落地方式
+    （isDel=1 / 约束改为非必填），比较时忽略括号差异。"""
+    return re.sub(r"删除字段（[^）]*）：", "删除字段：", item)
+
+
 def ddl_stmt_comments(sql):
     """DDL 语句级注释：Doris 用 /* */，Greenplum 用 --（排除顶部清单块）"""
     body = re.sub(r"\A\s*/\*.*?\*/", "", sql, count=1, flags=re.S)
@@ -121,14 +127,16 @@ def check(ddl_paths, revise_path):
     for i in rev_list:
         print("   ", i)
 
-    # 1. DDL 清单一致
+    # 1. DDL 清单一致（删除字段条目按括号归一化后比较，spec 第 4 节）
     for p in ddl_paths:
-        d = top_list(read(p))
+        d_raw = top_list(read(p))
+        d = [norm_del(x) if "删除字段" in x else x for x in d_raw]
+        rev_cmp = [norm_del(x) if "删除字段" in x else x for x in rev_list]
         name = Path(p).name
-        if d == rev_list:
+        if d == rev_cmp:
             print(OK + f"{name} 顶部清单与修订记录逐字一致")
         else:
-            errors.append(f"{name} 顶部清单与修订记录不一致\n      DDL   : {d}\n      修订记录: {rev_list}")
+            errors.append(f"{name} 顶部清单与修订记录不一致\n      DDL   : {d}\n      修订记录: {rev_cmp}")
             print(NG + f"{name} 顶部清单与修订记录不一致")
 
     # 2. summary
@@ -170,14 +178,15 @@ def check(ddl_paths, revise_path):
     else:
         errors.append("未找到 edsm_revise_record 插入语句")
 
-    # 3. DDL 语句级注释
+    # 3. DDL 语句级注释（删除字段条目按括号归一化后比较，spec 第 4 节）
     bare = [strip_no(x) for x in rev_list]
+    bare_norm = [norm_del(x) if "删除字段" in x else x for x in bare]
     for p in ddl_paths:
         cs = [c for c in ddl_stmt_comments(read(p)) if c]
         # 排除修订记录式头部行（集合/需求/字段/说明）
         cs = [c for c in cs if not (c.startswith("集合:") or c.startswith("需求:") or c.startswith("字段:") or c.startswith("说明:"))]
         name = Path(p).name
-        bad = [c for c in cs if c not in bare]
+        bad = [c for c in cs if (norm_del(c) if "删除字段" in c else c) not in bare_norm]
         if bad:
             errors.append(f"{name} 语句级注释不在清单内: {bad}")
             print(NG + f"{name} 语句级注释不在清单内: {bad}")
@@ -261,10 +270,10 @@ def check(ddl_paths, revise_path):
                     if not re.match(r'^[^\[\]]+\[', r):
                         bad_batch.append(f"{x} 顿号分隔处格式异常：『{r}』")
         elif "修改字段" in x:
-            # 修改字段：每个字段独立一行，不得用顿号/、连接多个字段
-            if "、" in x and re.search(r"修改字段[：:].*?[、].*?[\u4e00-\u9fff]+\[", x):
-                bad_batch.append(f"{x} 修改字段不得用顿号合并多字段，应每行一个字段")
-            elif "、" in x:
+            # 修改字段：每个字段独立一行，不得用顿号/、连接多个字段。
+            # 判定依据：代码型[]组（[大写字母开头的编码]）计数——合法单字段行=表名[]+字段[]共2组；
+            # 字段中文名自身含顿号（如 麻醉中、麻醉后…[ANES_RISK]）时仍只有2组，不误报。
+            if len(re.findall(r"\[[A-Z][A-Z0-9_]{2,}\]", x)) >= 3:
                 bad_batch.append(f"{x} 修改字段不得用顿号合并多字段，应每行一个字段")
     if bad_fmt:
         errors.append(f"变更描述不符合模板 {{表中文名}}[{{TABLE_EN}}]{{操作}}（] 后禁空格）: {bad_fmt}")

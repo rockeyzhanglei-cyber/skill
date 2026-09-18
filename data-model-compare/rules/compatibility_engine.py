@@ -230,23 +230,31 @@ class CompatibilityEngine:
     支持动态添加、禁用规则。
 
     使用方式：
-        engine = CompatibilityEngine(skill_dir)
+        engine = CompatibilityEngine(skill_dir)                  # 自行直读 YAML（回退路径）
+        engine = CompatibilityEngine(skill_dir, kb_manager=kb)   # 统一经知识库管理器装载（推荐）
         is_compatible, rule_name = engine.is_compatible(target_field, source_field)
     """
 
-    def __init__(self, skill_dir: str):
+    def __init__(self, skill_dir: str, kb_manager=None):
         self.skill_dir = skill_dir
         self.rules: List[CompatibilityRule] = []
-        self._load_rules()
+        self._load_rules(kb_manager)
 
-    def _load_rules(self):
-        """从 YAML 加载规则"""
-        config_path = os.path.join(self.skill_dir, 'knowledge_base', 'compatibility_rules.yaml')
-        if not os.path.exists(config_path):
-            return
+    def _load_rules(self, kb_manager=None):
+        """加载规则
 
-        with open(config_path, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
+        优先从 KnowledgeBaseManager 获取（与主流程共享缓存与 MD5 校验，
+        comparator 每次 new 不会再重复读盘）；未提供 manager 时回退为直读 YAML。
+        """
+        if kb_manager is not None:
+            data = {'compatibility_rules': kb_manager.compatibility_rules}
+        else:
+            config_path = os.path.join(self.skill_dir, 'knowledge_base', 'compatibility_rules.yaml')
+            if not os.path.exists(config_path):
+                return
+
+            with open(config_path, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f)
 
         if not data:
             return

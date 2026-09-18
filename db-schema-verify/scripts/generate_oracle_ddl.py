@@ -375,6 +375,9 @@ def generate_rebuild_script(rows, all_tables=None, pk_map=None):
     lines.append("-- 生成方式: 从基准库CSV自动生成")
     lines.append("-- 适用版本: Oracle 11g/12c/19c")
     lines.append("-- 说明: 每张表（原表+TRAN+LOG）为一个独立执行块，表间互不影响")
+    lines.append("-- 执行: 普通语句以 ; 结尾逐条执行；/ 仅用于结束 PL/SQL 匿名块（DROP 段），")
+    lines.append("--       不可加在普通语句后（会重复执行缓冲区，重跑报 ORA-00955）。")
+    lines.append("--       sqlplus/PLSQL Developer 可整文件执行，也可逐条执行。")
     lines.append("-- ============================================")
     lines.append("")
     lines.append("-- 第一阶段: 删除现有表（忽略表不存在错误）")
@@ -424,9 +427,8 @@ def generate_rebuild_script(rows, all_tables=None, pk_map=None):
             
             lines.append(",\n".join(col_defs))
             lines.append(");")
-            lines.append("/")
             lines.append("")
-            
+
             # 主键约束 - 只有原表有主键
             is_derived_table = table_name.endswith('_TRAN') or table_name.endswith('_LOG')
             if table['pk_cols'] and not is_derived_table:
@@ -434,7 +436,7 @@ def generate_rebuild_script(rows, all_tables=None, pk_map=None):
                 pk_col_names = [c['name'] for c in pk_cols]
                 pk_constraint = table['pk_constraint'] or f"PK_{table_name}"
                 lines.append(f"ALTER TABLE {table_name} ADD CONSTRAINT {pk_constraint} PRIMARY KEY ({', '.join(pk_col_names)});")
-                lines.append("/")
+                lines.append("")
                 lines.append("")
     
     return "\n".join(lines)
@@ -454,6 +456,8 @@ def generate_fix_script(rows, base_tables=None):
     lines.append("-- Oracle 修复DDL脚本")
     lines.append("-- 生成方式: 从基准库CSV自动生成")
     lines.append("-- 适用版本: Oracle 11g/12c/19c")
+    lines.append("-- 执行: 普通语句以 ; 结尾逐条执行；/ 仅用于结束 PL/SQL 匿名块，")
+    lines.append("--       不可加在普通语句后（会重复执行缓冲区，重跑报 ORA-00955/ORA-01442）。")
     lines.append("-- ============================================")
     lines.append("")
     

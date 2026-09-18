@@ -68,41 +68,59 @@ _SYNONYMS_CACHE = None
 
 
 def _load_field_synonyms() -> dict:
-    """从 field_synonyms.yaml 加载双向同义词字典（与 standard_comparator 一致）。"""
+    """加载双向同义词字典（与 standard_comparator 同源）。
+
+    优先经 KnowledgeBaseManager 统一装载（与比对器共享同一份解析结果，
+    避免"体检侧"与"匹配侧"各读一份文件造成漂移）；
+    manager 不可用时回退为按候选路径直读 YAML（保持旧行为）。
+    """
     global _SYNONYMS_CACHE
     if _SYNONYMS_CACHE is not None:
         return _SYNONYMS_CACHE
     synonyms: dict = {}
-    base = os.path.dirname(os.path.abspath(__file__))
-    candidates = [
-        os.path.join(base, '..', 'knowledge_base', 'field_synonyms.yaml'),
-        os.path.join(base, '..', '..', 'knowledge_base', 'field_synonyms.yaml'),
-        os.path.expanduser('~/.workbuddy/skills/data-model-compare/knowledge_base/field_synonyms.yaml'),
-        os.path.expanduser('~/.cache/WinCode/skill/data-model-compare/knowledge_base/field_synonyms.yaml'),
-    ]
-    path = None
-    for c in candidates:
-        if os.path.exists(c):
-            path = os.path.abspath(c)
-            break
-    if path:
-        try:
-            import yaml
-            with open(path, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f) or {}
-            field_synonyms = data.get('field_synonyms', {}) or {}
-            for cn_name, info in field_synonyms.items():
-                if isinstance(info, dict) and 'synonyms' in info:
-                    syn_list = list(info['synonyms'])
-                    synonyms.setdefault(cn_name, [])
-                    for s in syn_list:
-                        if s not in synonyms[cn_name]:
-                            synonyms[cn_name].append(s)
-                        synonyms.setdefault(s, [])
-                        if cn_name not in synonyms[s]:
-                            synonyms[s].append(cn_name)
-        except Exception:
-            synonyms = {}
+
+    # ===== 首选：经知识库管理器装载（单一事实来源） =====
+    try:
+        from knowledge_base.manager import KnowledgeBaseManager
+        skill_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        kb = KnowledgeBaseManager(skill_dir)
+        # manager 的 field_synonyms 已含反向映射（同义词 -> 主词），与下方手工构建一致
+        synonyms = dict(kb.synonyms)
+    except Exception:
+        synonyms = {}
+
+    # ===== 回退：按候选路径直读 =====
+    if not synonyms:
+        base = os.path.dirname(os.path.abspath(__file__))
+        candidates = [
+            os.path.join(base, '..', 'knowledge_base', 'field_synonyms.yaml'),
+            os.path.join(base, '..', '..', 'knowledge_base', 'field_synonyms.yaml'),
+            os.path.expanduser('~/.workbuddy/skills/data-model-compare/knowledge_base/field_synonyms.yaml'),
+            os.path.expanduser('~/.cache/WinCode/skill/data-model-compare/knowledge_base/field_synonyms.yaml'),
+        ]
+        path = None
+        for c in candidates:
+            if os.path.exists(c):
+                path = os.path.abspath(c)
+                break
+        if path:
+            try:
+                import yaml
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = yaml.safe_load(f) or {}
+                field_synonyms = data.get('field_synonyms', {}) or {}
+                for cn_name, info in field_synonyms.items():
+                    if isinstance(info, dict) and 'synonyms' in info:
+                        syn_list = list(info['synonyms'])
+                        synonyms.setdefault(cn_name, [])
+                        for s in syn_list:
+                            if s not in synonyms[cn_name]:
+                                synonyms[cn_name].append(s)
+                            synonyms.setdefault(s, [])
+                            if cn_name not in synonyms[s]:
+                                synonyms[s].append(cn_name)
+            except Exception:
+                synonyms = {}
     _SYNONYMS_CACHE = synonyms
     return synonyms
 
@@ -232,11 +250,90 @@ def self_validate(compare_result: dict, source_standard: dict, target_standard: 
                 'action': '建议人工复核；若确认错误，在 Excel 中修改为正确源字段',
             })
 
+    # 3) 跨表业务判断待复核（B 信号，v2.0.5）
+    # 触发（结构性，不限匹配通道）：某字段命中的源表 ≠ 其目标表的主对齐源表，
+    # 且主对齐源表中**没有**同名（同中文名）项 —— 即程序因主源表缺项才兜底到
+    # 另一张表抓同名项（例：「诊断依据」exact_chinese 命中「首次病程记录.诊断依据」，
+    # 而其主源表「入出院诊断记录」无同名项；前者"针对每条诊断"，后者是"病程叙述"，
+    # 业务上未必等价）。该关联可能由任何通道产生（exact_chinese / cross_table /
+    # auto_relation 等），程序只判定"结构性跨表 + 主源表缺项"这一事实。
+    # 程序只"标记"、不"裁决"：标记结果交由模型/人工 adjudication（C 流程：
+    # 接受该跨表关联 / 改指主源表最近字段 / 标记为目标标准新增）。
+    cross_table_judgments = []
+
+    # 3a) 重建每个目标表的主对齐源表：在其所有匹配中，出现次数最多的源表即主源表
+    # （跨表命中在占比上通常是少数，多数命中仍落在主对齐源表，故取众数即可稳定还原）。
+    tbl_src_counter = {}
+    for _it in list(compare_result.get('matched', [])) + list(compare_result.get('modified', [])):
+        _tn = _it.get('table_name')
+        _sc = _it.get('source_table_chinese_name') or _it.get('source_table')
+        if not _tn or not _sc:
+            continue
+        tbl_src_counter.setdefault(_tn, {})
+        tbl_src_counter[_tn][_sc] = tbl_src_counter[_tn].get(_sc, 0) + 1
+    tbl_primary_src = {}
+    for _tn, _cnt in tbl_src_counter.items():
+        if _cnt:
+            # 出现次数最多者为主对齐源表（并列时取字典序首个，稳定即可）
+            _best_src, _best_n = None, -1
+            for _sc, _n in _cnt.items():
+                if _n > _best_n:
+                    _best_n, _best_src = _n, _sc
+            tbl_primary_src[_tn] = _best_src
+
+    # 3b) 主对齐源表的字段中文名索引（判断"主源表是否含同名项"）
+    primary_field_idx = {}
+    for _t in source_standard.get('tables', []):
+        _tc = _t.get('chinese_name') or _t.get('name')
+        if _tc in tbl_primary_src.values():
+            primary_field_idx[_tc] = {
+                (f.get('chinese_name') or f.get('field_chinese_name'))
+                for f in _t.get('fields', [])
+                if (f.get('chinese_name') or f.get('field_chinese_name'))
+            }
+
+    # 3c) 逐条检测：命中源表 ≠ 主对齐源表（结构性跨表），且主源表无同名项。
+    # 触发不限定匹配通道 —— exact_chinese 也可能解析到非主源表
+    # （例：「诊断依据」exact_chinese 命中「首次病程记录.诊断依据」，而其主源表
+    # 「入出院诊断记录」无同名项），同样属"跨表业务判断"范畴，需标记。
+    for _it in list(compare_result.get('matched', [])) + list(compare_result.get('modified', [])):
+        _tn = _it.get('table_name')
+        _sc = _it.get('source_table_chinese_name') or _it.get('source_table')
+        _prim = tbl_primary_src.get(_tn)
+        if not _prim or not _sc or _sc == _prim:
+            continue  # 无主源表信息，或命中源表即主源表（非跨表）
+        _mt = _it.get('match_type', '')
+        _tcn = (_it.get('target_chinese_name') or _it.get('field_chinese_name')
+                or _it.get('chinese_name'))
+        if not _tcn:
+            continue
+        # B 定义触发条件：主对齐源表不含该同名项（程序因主源表缺项才兜底跨表）。
+        if _tcn in primary_field_idx.get(_prim, set()):
+            continue
+        _tgt_field = _it.get('target_field') or _it.get('field_name')
+        cross_table_judgments.append({
+            'table': _tn,
+            'table_chinese_name': _it.get('table_chinese_name'),
+            'target_field': _tgt_field,
+            'target_cn': _tcn,
+            'matched_source_table': _sc,
+            'matched_source_field': _it.get('source_field_chinese_name') or _it.get('source_field'),
+            'primary_source_table': _prim,
+            'match_type': _mt,
+            'reason': (f'字段「{_tcn}」命中源表「{_sc}」（≠ 主对齐源表「{_prim}」），'
+                       f'且主源表中并无同名项；程序无法判断该跨表关联是否符合业务语义，需 adjudication'),
+            'action': ('建议模型/人工 adjudication：'
+                       '①接受该跨表关联（写入 field_mappings 确认）；'
+                       '②改指主源表最近字段；③判定为目标标准新增'),
+        })
+
     return {
         'summary': {
             'leak_count': len(leaks),
             'suspect_count': len(suspects),
+            'cross_table_judgment_count': len(cross_table_judgments),
         },
         'leaks': leaks,
         'suspects': suspects,
+        'cross_table_judgments': cross_table_judgments,
     }

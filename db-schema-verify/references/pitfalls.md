@@ -316,3 +316,15 @@
 - **根因**：各脚本独立实现表清单解析，扩展逻辑没有统一
 - **修复**：`load_table_scope()` 提取基础表名后自动扩展 `_TRAN/_LOG` 后缀
 - **规则**：所有从表清单MD提取表名的脚本，必须统一执行"基础表 + _TRAN + _LOG"扩展，扩展逻辑以 `generate_export_sql.py` 的 `expand_tables_with_suffix()` 为准
+
+### 错误53：SQL Server 导出SQL的 index_columns JOIN 未限定主键索引，普通索引列被标成假主键
+- **现象**：云南项目 rebuild 脚本所有表的主键都比真实主键多列（如 BA_SYJBK 的 TBRQ、EMR_MZJL 的 TBRQ 只是普通索引列却进了主键）；每份 CSV 混入 170~325 个假 PK 行
+- **根因**：`export_table_structure_sqlserver.sql` 中 `sys.index_columns` 的 JOIN 未先限定 `is_primary_key=1`，任何出现在普通索引键列中的列 `PK_FLAG` 也被置 'Y'（此时 `PK_CONSTRAINT_NAME` 为空），且产生 (表,列) 重复行
+- **修复**：导出 SQL 改为先 JOIN `sys.indexes(i.is_primary_key=1)` 再 JOIN `index_columns`；所有消费端（gen_scripts.py / compare_with_docx.py / core/csv_loader.py）主键判定改为 **PK_FLAG='Y' 且 PK_CONSTRAINT_NAME 非空才算主键**（容错：CSV 无约束名列时退回 PK_FLAG；重复行优先取带约束行；按 PK_POSITION 排序）
+- **规则**：SQL Server 系统视图 JOIN `sys.index_columns` 必须先限定主键索引；`PK_FLAG` 单独不可信，必须配 `PK_CONSTRAINT_NAME` 非空判定。Oracle 导出模板无此问题（走 all_constraints constraint_type='P'）
+
+### 错误54：BA_SYJBK 的 MAX 转换规则作用于主键列，Oracle 生成 CLOB 主键（非法 DDL）
+- **现象**：rebuild_oracle.sql 中 BA_SYJBK 的 `YLJGDM`/`JZLSH`（主键）变成 CLOB；`CONSTRAINT PK_BA_SYJBK PRIMARY KEY (CLOB列)` 在 Oracle 直接报错（CLOB 不能作主键）
+- **根因**：BA_SYJBK 行宽超限规则（新增/加长>=50、既有/新增>=500 转 MAX）未跳过主键列；文档要求主键扩到 64 命中 50 阈值；SQL Server 侧 VARCHAR(MAX) 同样不能作主键
+- **修复**：`apply_basyjkb_max/_500` 增加 `is_pk` 参数，主键列一律跳过 MAX 转换（调用点以 `csv pk=='Y'` 传入）；`gen_create` 对主键列强制 NOT NULL（防止"多余必填无默认→可空"规则误伤主键，如 ZYSFJLB.TFBZ）
+- **规则**：任何"长度转 MAX/CLOB"类规则必须排除主键列；建表生成器必须兜底强制主键列 NOT NULL。gen_scripts.py（任务脚本）与 skill-core core/ 引擎已同步修正

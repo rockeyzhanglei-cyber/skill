@@ -30,8 +30,11 @@ INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
 INNER JOIN sys.columns c ON t.object_id = c.object_id
 INNER JOIN sys.types tp ON c.user_type_id = tp.user_type_id
 LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id
-LEFT JOIN sys.index_columns ic ON c.object_id = ic.object_id AND c.column_id = ic.column_id AND ic.is_included_column = 0
-LEFT JOIN sys.indexes i ON ic.object_id = i.object_id AND ic.index_id = i.index_id AND i.is_primary_key = 1
+-- 仅关联【主键索引】：先取 is_primary_key=1 的索引，再匹配其键列。
+-- （旧写法直接 JOIN sys.index_columns 会把普通索引列也标成 PK_FLAG='Y' 且约束名为空，并产生重复行）
+LEFT JOIN sys.indexes i ON i.object_id = c.object_id AND i.is_primary_key = 1
+LEFT JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+    AND ic.column_id = c.column_id AND ic.is_included_column = 0
 LEFT JOIN sys.extended_properties ep ON ep.major_id = t.object_id AND ep.minor_id = 0 AND ep.name = 'MS_Description'
 LEFT JOIN sys.extended_properties ep_col ON ep_col.major_id = t.object_id AND ep_col.minor_id = c.column_id AND ep_col.name = 'MS_Description'
 WHERE s.name = SCHEMA_NAME()

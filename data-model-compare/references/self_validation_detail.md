@@ -132,6 +132,57 @@
 - 最多循环5轮，超过5轮还有问题则停下来报告给用户
 - 如果某一轮修复后问题数量反而增加，立即回滚该修复并报告
 
+### 跨表业务判断待复核（B 信号，v2.0.5）
+
+固化规则能判定"同名列是否存在/核心概念是否一致"，但**无法判断同名数据元在不同业务上下文里是否真的等价**。
+例如山东「入院记录-诊断.诊断依据」在主源表「入出院诊断记录」无同名项，程序兜底命中
+「首次病程记录.诊断依据」——前者针对每条诊断、后者是病程叙述，业务上未必等价。这类判断只能交给模型/人工。
+
+`matchers/self_validator.py` 在自检末尾产出 `cross_table_judgments`（不纳入 leak/suspect，是独立信号）：
+
+- **触发（结构性，不限匹配通道）**：某字段命中的源表 **≠** 其目标表的主对齐源表，且主对齐源表中**没有**同名（同中文名）项。
+  即程序因主源表缺项才兜底到另一张表抓同名项（可能由 `exact_chinese` / `cross_table` / `auto_relation` 任一通道产生）。
+- **程序只标记、不裁决**：每条含 `matched_source_table` / `primary_source_table` / `match_type` / `reason` / `action`，
+  供模型/人工 adjudication。**它不是"错误"，是"待复核队列"。**
+- 输出位置：`self_validation_result.json` 的 `cross_table_judgments` 与 `summary.cross_table_judgment_count`；
+  `self_validation_report.md` 的"**三、跨表业务判断待复核**"章节（表头：目标表/目标字段/目标(中文)/命中源表/命中源字段/主对齐源表/匹配方式）。
+
+### 模型裁决闭环（C，v2.0.5）
+
+检测(B)之后由 `scripts/adjudicate_cross_table.py` 完成"裁决→持久化"：
+
+```bash
+# 1) 生成草稿（启发式预裁决 + 可解释 rationale）
+python scripts/adjudicate_cross_table.py --temp <任务temp目录>
+
+# 2) 模型/人工对拿不准的项直接给定裁决（绕过启发式，即 judge 环节）
+python scripts/adjudicate_cross_table.py --temp <dir> \
+    --overrides cross_table_overrides.yaml
+
+# 3) 人工确认草稿后，合并 accept/redirect 映射到 field_mappings.yaml（闭环）
+python scripts/adjudicate_cross_table.py --temp <dir> --apply
+```
+
+- 每个待裁决项检索上下文（目标字段说明、命中源字段说明、主源表说明，及主源表中核心概念相近字段），
+  给出 `accept` / `redirect` / `new` 决策，写入 `cross_table_adjudication_draft.yaml`
+  （含 `field_mappings_yaml` 段，可直接追加进 `knowledge_base/field_mappings.yaml`）。
+- 非 accept 项一律 `requires_human_confirm: true`。**启发式无法正确裁决的（如同名但核心概念不兼容、
+  仅松散同名的）必须保留人工确认，绝不静默落库**——这正是 B 要交给模型/人工的核心原因。
+- `--overrides` 示例（用户对「诊断依据」的裁决就是模型拍板）：
+
+```yaml
+overrides:
+  - target_table: 入院记录-诊断(辅 D08 标）
+    target_field_cn: 诊断依据
+    decision: redirect
+    proposed_source_table: 入出院诊断记录
+    proposed_source_field: 诊断说明
+    rationale: "V6.0 入出院诊断记录以诊断说明承载每条诊断的依据，与山东诊断依据语义等价"
+```
+
+> ⚠️ `field_mappings.yaml` 按**英文字段名**全局生效；表级专属映射请用 `user_custom_mappings.yaml`
+> 的表作用域格式，避免跨任务污染。
+
 ### 核验记录格式
 
 每条核验结果输出到对话中（确认模式在汇总报告中展示，自动模式实时输出）：

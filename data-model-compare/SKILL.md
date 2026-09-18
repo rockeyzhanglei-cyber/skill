@@ -1,7 +1,7 @@
 ---
 name: data-model-compare
 description: 数据模型比对，确保原标准数据无损传输到目标标准，自动生成修订建议。触发：数据模型比对、标准比对、数据标准比对、模型比对、比对这个文档、对比两个标准、对照两份标准、标准差异分析、diff两个标准、无损传输、数据上传、标准覆盖、值域比对、值域修订、代码表比对、标准迁移、标准升级、版本差异、两份标准、比对报告、自验证、核验比对结果、验证一下结果、自动验证、自动修复、生成Excel、人工核对、逐表核对。不触发：纯数据模型修订用 data-model-revision，生成DDL用 reg-ddl-generator。
-version: 2.0.0
+version: 2.0.5
 agent_created: true
 author: WinAi
 tags: [数据标准, 模型比对, 数据迁移, 值域修订]
@@ -236,6 +236,31 @@ needs_setup 按 [references/setup-guide.md](references/setup-guide.md) 只补缺
 
 > **⚠️ 执行自验证流程前必读**：[references/self_validation_detail.md](references/self_validation_detail.md)
 > 含分层抽样表（各 match_type 的抽样数与核验重点）、核验判断标准、3轮具体安排、汇总报告格式、核验记录格式。
+
+### 跨表业务判断与模型裁决（B/C，v2.0.5）
+
+比对器是**固化规则**，能判定"同名列是否存在/核心概念是否一致"，但**无法判断同名数据元在不同业务上下文里是否真的等价**。例如山东「入院记录-诊断.诊断依据」在主源表「入出院诊断记录」无同名项，程序兜底命中「首次病程记录.诊断依据」——前者针对每条诊断、后者是病程叙述，业务上未必等价。**这类判断只能交给模型/人工。**
+
+为此把自检扩成"检测→裁决→持久化"闭环：
+
+- **B（检测，程序只标记不裁决）**：`matchers/self_validator.py` 的 `cross_table_judgments` 信号。触发条件（结构性，不限匹配通道）：
+  某字段命中的源表 **≠** 其目标表的主对齐源表，且主对齐源表中**没有**同名（同中文名）项。
+  即程序因主源表缺项才兜底到另一张表抓同名项。输出进 `self_validation_result.json` 与 `self_validation_report.md` 的"三、跨表业务判断待复核"。
+- **C（裁决，模型/人工介入）**：`scripts/adjudicate_cross_table.py` 读 `cross_table_judgments`，
+  为每个待裁决项检索上下文（目标字段说明、命中源字段说明、主源表说明，及主源表中核心概念相近字段），
+  给出 `accept` / `redirect` / `new` 之一并附 rationale，产出草稿 `cross_table_adjudication_draft.yaml`
+  （含可直接追加进 `field_mappings.yaml` 的 `field_mappings_yaml` 段）。非 accept 项一律 `requires_human_confirm: true`。
+  - 模型/人工可用 `--overrides overrides.yaml` 对指定 (目标表, 目标字段) 直接给定裁决（即"judge"环节），
+    例如把「诊断依据」裁决为 `redirect → 入出院诊断记录.诊断说明`，绕开启发式。
+  - 启发式无法正确裁决的（如「诊断依据」与「诊断说明」核心概念不兼容、且与「诊断类别代码」仅是松散同名），
+    **必须**保留 `requires_human_confirm` 交人工确认，绝不静默落库。
+- **持久化**：人工/模型确认草稿后，`python scripts/adjudicate_cross_table.py --temp <dir> --apply`
+  将 `accept`/`redirect` 映射合并进 `knowledge_base/field_mappings.yaml`，下一轮比对即生效（闭环）。
+  ⚠️ `field_mappings.yaml` 按**英文字段名**全局生效；表级专属映射请用 `user_custom_mappings.yaml`
+  的表作用域格式，避免跨任务污染。
+
+> 设计要点：**程序只负责标记与提供上下文，裁决权永远在模型/人工**。B 的信号是"待复核队列"，
+> 不是"错误"；C 把它变成可追溯、可确认的映射，而非让固化规则替业务拍板。
 
 ## 程序修改规范（强制）
 

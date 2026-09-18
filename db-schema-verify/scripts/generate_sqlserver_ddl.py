@@ -382,6 +382,7 @@ def generate_rebuild_script(rows, all_tables=None, pk_map=None):
     lines.append(f"-- 表数量: {len(ordered_table_names)}")
     lines.append("-- 生成方式: 从基准库CSV自动生成")
     lines.append("-- 适用版本: SQL Server 2012及以上")
+    lines.append("-- 执行: 每条语句以 GO 结尾分批，SSMS/sqlcmd 可整文件执行，也可按 GO 逐批执行")
     lines.append("-- ============================================")
     lines.append("")
     lines.append("-- 第一阶段: 删除现有表")
@@ -395,8 +396,8 @@ def generate_rebuild_script(rows, all_tables=None, pk_map=None):
             lines.append(f"IF OBJECT_ID('{table_name}', 'U') IS NOT NULL")
             lines.append(f"BEGIN")
             lines.append(f"    DROP TABLE [{table_name}];")
-            lines.append(f"END")
-        lines.append("GO")
+            lines.append(f"END;")
+            lines.append("GO")  # 每条 DROP 独立批次，便于逐条执行
         lines.append("")
     
     lines.append("")
@@ -489,6 +490,7 @@ def generate_fix_script(rows, base_tables=None):
     lines.append("-- SQL Server 修复DDL脚本")
     lines.append("-- 生成方式: 从基准库CSV自动生成")
     lines.append("-- 适用版本: SQL Server 2012及以上")
+    lines.append("-- 执行: 每条语句以 GO 结尾分批，SSMS/sqlcmd 可整文件执行，也可按 GO 逐批执行")
     lines.append("-- ============================================")
     lines.append("")
     
@@ -526,7 +528,7 @@ def generate_fix_script(rows, base_tables=None):
                         parts.append(f"DEFAULT {base_col['default']}")
                     lines.append(f"-- 类型不一致: {derived_table}.{col_name} 原表={base_col['type_def']}, {suffix}表={derived_col['type_def']}")
                     lines.append(f"-- ALTER TABLE [{derived_table}] ALTER COLUMN {' '.join(parts)};")
-                    lines.append("GO")
+                    lines.append("")
     
     lines.append("")
     return "\n".join(lines)

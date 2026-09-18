@@ -50,6 +50,16 @@ NORMALIZE_MAP = {
     '科别': '科室',
     # "报告单"与"报告"在标识类字段中指同一实体
     '报告单': '报告',
+    # "唯一标识"即"标识"：检验报告唯一标识 = 检验报告标识（同字段不同尾词写法）。
+    # 归一后可由"主题词网关"的空残基规则放行（报告单编号 vs 报告唯一标识 同一报告ID），
+    # 避免把同义标识符误判为不同主题。
+    '唯一标识': '标识',
+    # "内码"即"标识"：主键/记录唯一标识的同义写法。山东标准普遍用"内码"(如 内码[ID]、
+    # 住院就诊记录内码) 作表主键，V6.0 区域平台用"XX唯一标识"/"系统编码"作主键。
+    # 归一后 内码 ≡ 标识 ≡ 唯一标识，使 XX内码 ↔ XX唯一标识 在 keyword 通道命中
+    # （住院就诊记录内码 ↔ 住院就诊记录唯一标识）。裸"内码"归一为空残基，由
+    # _is_keyword_match 的空残基早退(行3703)拦截，不会串配 患者标识 等空残基字段。
+    '内码': '标识',
     # 中医"辩证/辨证"异形词归一（其中:中医辩证论治会诊费 ↔ 中医辨证论治会诊费）
     '辩证': '辨证',
     # 词序变体：就诊结束 ↔ 结束就诊（语义相同）
@@ -77,9 +87,70 @@ NORMALIZE_MAP = {
 NOISE_CHARS = '、，,；;／/·　 的已:：'
 
 
+# ===== 字形归一化（v2.0.3）：匹配侧与体检侧共用的最底层归一 =====
+# 背景：目标/源标准对同一数据元存在三类"写法级"差异——
+#   1) 全角/半角混写    产后宫底高度（cm） vs 产后宫底高度(cm)、地址-省（自治区、直辖市） vs (...)
+#   2) 异体字           査(U+67FB) vs 查(U+67E5)（CT检査结果 vs CT检查结果，山东实测 6 组字段因此漏配）
+#   3) 异形词           适应证 vs 适应症（药理学规范写法 vs 习惯写法）、结论 vs 结果
+# 后果是双重的：exact 通道漏配（该中不失）→ 跌落到 keyword/n-gram 通道误配到别的字段。
+# 在字形层统一归一，让最高优先级的 exact 通道回收这些字段，是全局收益最大的单点。
+#
+# 维护约定：本层只收录"无歧义的等价写法"。拿不准的等价关系（如 结果/信息）
+# 一律不收，交给上层网关与知识库判断。
+
+# 1) 全角 ASCII 区（U+FF01–U+FF5E）与全角空格 → 半角。显式区段转换而非
+#    unicodedata.NFKC：NFKC 会连带转换 ㎎/㎡/① 等非 ASCII 全角字符，过于激进。
+def _build_fullwidth_table() -> dict:
+    tbl = {0x3000: 0x20}  # 全角空格
+    for cp in range(0xFF01, 0xFF5F):
+        tbl[cp] = cp - 0xFEE0
+    return tbl
+
+_FULLWIDTH_TABLE = _build_fullwidth_table()
+
+# 2) 异体字：纯字形差异，读音字义完全相同，可放心整字替换。数据驱动，可扩充。
+VARIANT_GLYPHS = {
+    '査': '查',   # U+67FB 异体 → U+67E5 常用（CT检査结果 vs CT检查结果）
+}
+
+# 3) 异形词：人工确认的等价写法，词级整词替换（顺序：长词优先由调用方保证——
+#    normalize_glyphs 内部按键长降序应用）。只收医学/标准语境下无歧义的对。
+VARIANT_WORDS = {
+    '适应证': '适应症',   # 药理学规范写法 = 习惯写法（麻醉适应证 ↔ 麻醉适应症）
+    '禁忌证': '禁忌症',   # 同上（禁忌证 ↔ 禁忌症）
+    '结论': '结果',       # 总检结论 = 总检结果、会诊结论 = 会诊结果
+}
+
+
+def normalize_glyphs(name: str) -> str:
+    """字形层归一化：全角→半角 + 异体字 + 异形词。
+
+    幂等（可重复调用）；位于所有语义判断之前的最底层，匹配决策侧
+    （exact/keyword/semantic/synonym/core_compatible）与体检降噪侧
+    （normalize_concept）共用，禁止在调用方再做一份平行实现。
+    """
+    s = (name or '').translate(_FULLWIDTH_TABLE)
+    for k, v in VARIANT_GLYPHS.items():
+        s = s.replace(k, v)
+    for k in sorted(VARIANT_WORDS, key=len, reverse=True):
+        s = s.replace(k, VARIANT_WORDS[k])
+    return s
+
+
+def cn_key(name: str) -> str:
+    """exact 通道比对键：字形归一化 + 去空白。
+
+    用于"中文名精确匹配"的两侧归一：产后宫底高度（cm） 与 产后宫底高度(cm)
+    的键相等，从而在 exact 通道直接命中，不再跌落到模糊通道。
+    """
+    return re.sub(r'\s+', '', normalize_glyphs(name))
+
+
 def normalize_concept(name: str) -> str:
     """误匹配判据前的归一化（仅自验证器使用）：去掉括号说明、噪音字符、同义字符替换。"""
     s = name or ''
+    # v2.0.3: 字形层先行（全角/异体字/异形词），再做既有降噪
+    s = normalize_glyphs(s)
     # 去掉括号及内部说明，如 "入院病情(对应其他诊断1)"
     s = re.sub(r'[（(][^）)]*[）)]', '', s)
     for k, v in NORMALIZE_MAP.items():
@@ -144,12 +215,15 @@ def core_compatible(name1: str, name2: str, extra_suffix=(), norm=None,
     """
     if not name1 or not name2:
         return True
+    # v2.0.3 字形层归一：所有语义判定之前统一处理异体字/全半角/异形词。
+    # norm 路径（体检侧）的 normalize_concept 已内含字形层，无需重复；
+    # 比对器路径（norm=None）在此显式补齐，保证两侧概念判定同源。
     if norm is not None:
         c1 = strip_generic(norm(name1), extra_suffix, protect=True, prefixes=prefixes)
         c2 = strip_generic(norm(name2), extra_suffix, protect=True, prefixes=prefixes)
     else:
-        c1 = strip_generic(name1, extra_suffix, protect=False, prefixes=prefixes)
-        c2 = strip_generic(name2, extra_suffix, protect=False, prefixes=prefixes)
+        c1 = strip_generic(normalize_glyphs(name1), extra_suffix, protect=False, prefixes=prefixes)
+        c2 = strip_generic(normalize_glyphs(name2), extra_suffix, protect=False, prefixes=prefixes)
     if not c1 and not c2:
         return True
     if not c1 or not c2:

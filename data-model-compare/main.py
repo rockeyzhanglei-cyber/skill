@@ -706,6 +706,7 @@ class DataModelCompareV2:
         print("\n[第三步·补充2] 自验证（漏配/误匹配体检）")
         print(f"  ✓ 漏配候选：{s['leak_count']} 个（建议补充字段映射）")
         print(f"  ✓ 误匹配候选：{s['suspect_count']} 个（建议人工复核）")
+        print(f"  ✓ 跨表业务判断待复核：{s.get('cross_table_judgment_count', 0)} 个（需 adjudication）")
         print(f"  ✓ 自验证结果：{sv_path}")
         return sv
 
@@ -717,6 +718,7 @@ class DataModelCompareV2:
         lines.append('## 概要\n')
         lines.append(f'- 漏配候选（建议补充字段映射）：**{s["leak_count"]}** 个')
         lines.append(f'- 误匹配候选（建议人工复核）：**{s["suspect_count"]}** 个')
+        lines.append(f'- 跨表业务判断待复核（需 adjudication）：**{s.get("cross_table_judgment_count", 0)}** 个')
         lines.append('')
         lines.append('> 说明：本体检由程序自动完成，仅给出"高可信"的可疑项，'
                      '最终仍需人工在 compare_editable.xlsx 中确认或修正。\n')
@@ -751,6 +753,22 @@ class DataModelCompareV2:
                     f"{su.get('source_field','')} | {su.get('source_cn','')} | {su.get('match_type','')} |")
         else:
             lines.append('（无明显误匹配）\n')
+
+        # 三、跨表业务判断待复核（B 信号）
+        lines.append('\n## 三、跨表业务判断待复核（跨表通道命中且主源表缺同名项，需 adjudication）\n')
+        if sv.get('cross_table_judgments'):
+            lines.append('> 程序仅标记、不裁决。这些字段经跨表通道命中到非主对齐源表，'
+                         '且其主对齐源表无同名项；是否业务等价需模型/人工 adjudication'
+                         '（接受 / 改指主源表最近字段 / 标记新增）。\n')
+            lines.append('| 目标表 | 目标字段 | 目标(中文) | 命中源表 | 命中源字段 | 主对齐源表 | 匹配方式 |')
+            lines.append('| --- | --- | --- | --- | --- | --- | --- |')
+            for cj in sv['cross_table_judgments'][:400]:
+                lines.append(
+                    f"| {cj.get('table','')} | {cj.get('target_field','')} | {cj.get('target_cn','')} | "
+                    f"{cj.get('matched_source_table','')} | {cj.get('matched_source_field','')} | "
+                    f"{cj.get('primary_source_table','')} | {cj.get('match_type','')} |")
+        else:
+            lines.append('（无跨表业务判断待复核项）\n')
 
         with open(md_path, 'w', encoding='utf-8') as f:
             f.write('\n'.join(lines))
